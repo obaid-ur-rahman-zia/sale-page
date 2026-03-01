@@ -1,6 +1,7 @@
 # ---------- Dependencies ----------
     FROM node:20-alpine AS deps
     WORKDIR /app
+    ENV NPM_CONFIG_INCLUDE=optional
     
     # Prisma + Next on Alpine can require these runtime libs
     RUN apk add --no-cache libc6-compat openssl
@@ -8,7 +9,9 @@
     # Keep install layer cache-friendly
     COPY package.json package-lock.json* ./
     COPY prisma ./prisma
-    RUN npm ci
+    RUN npm ci --include=optional --no-audit --no-fund
+    # Fail-safe: ensure lightningcss native binary exists for Alpine musl.
+    RUN npm install --no-save --no-audit --no-fund lightningcss-linux-x64-musl@1.31.1
     
     # ---------- Builder ----------
     FROM node:20-alpine AS builder
