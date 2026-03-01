@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant POS System - Enhanced</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .cart-item {
+            transition: all 0.3s ease;
+        }
+        .cart-item:hover {
+            background-color: #f8fafc;
+        }
+        .product-card {
+            transition: all 0.3s ease;
+        }
+        .product-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+        .calculator-btn {
+            transition: all 0.2s ease;
+        }
+        .calculator-btn:hover {
+            transform: scale(1.05);
+        }
+        .calculator-btn:active {
+            transform: scale(0.95);
+        }
+        .scrollable-cart {
+            max-height: calc(100vh - 300px);
+            overflow-y: auto;
+        }
+        .scrollable-cart::-webkit-scrollbar {
+            width: 4px;
+        }
+        .scrollable-cart::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .scrollable-cart::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+        .calculator-display {
+            background: #1f2937;
+            color: #10b981;
+            font-family: 'Courier New', monospace;
+            border: 2px solid #374151;
+        }
+        .mode-indicator {
+            background: linear-gradient(45deg, #3b82f6, #8b5cf6);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .reserved-table {
+            background: #fef3c7 !important;
+            border: 2px solid #f59e0b !important;
+        }
+        .member-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .suggestions-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .suggestions-item:hover {
+            background-color: #f8fafc;
+        }
+        .suggestions-item:last-child {
+            border-bottom: none;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            z-index: 9999;
+            min-width: 300px;
+            max-width: 400px;
+            transform: translateX(100%);
+            transition: all 0.3s ease-out;
+            opacity: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            font-weight: 500;
+        }
+        .notification.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        .notification.success {
+            background: #10b981;
+            color: white;
+        }
+        .notification.error {
+            background: #ef4444;
+            color: white;
+        }
+        .notification.info {
+            background: #3b82f6;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Notification Area -->
+    <div id="notification" class="notification"></div>
+
+    <div class="flex h-screen overflow-hidden">
+        <!-- Left Section - Cart & Calculator -->
+        <div class="w-[40%] bg-white shadow-lg flex flex-col">
+            <!-- Cart Header with Controls -->
+            <div class="p-4 border-b">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-lg font-bold text-gray-800">Current Order</h2>
+                    <div class="flex gap-2 items-center">
+                        <!-- Member Search Input -->
+                        <div class="relative">
+                            <input type="text" id="memberSearch" placeholder="Member ID/Name/CNIC" 
+                            class=" px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            oninput="handleMemberSearch()" onchange="loadMemberData()" onblur="hideSuggestions()" onfocus="handleMemberSearch()">
+                            <button onclick="clearMemberData()" class="absolute right-2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-times text-xs"></i>
+                            </button>
+                            <!-- Search Suggestions Dropdown -->
+                            <div id="memberSuggestions" class="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg z-50 hidden max-h-48 overflow-y-auto">
+                                <!-- Suggestions will be populated here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Table Number Dropdown -->
+                        <select id="tableSelect" class=" px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" onchange="loadTableData()">
+                            <option value="">Table #</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                            <option value="7">7</option>
+                            <option value="8">8</option>
+                            <option value="9">9</option>
+                            <option value="10">10</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Member Info Display -->
+                <div id="memberInfo" class="member-info hidden">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="font-semibold text-sm" id="memberName">Member Name</div>
+                            <div class="text-xs opacity-90" id="memberDetails">ID: 12345 | Table: 3</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs opacity-90">Status</div>
+                            <div class="font-semibold text-sm" id="memberStatus">Active Order</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tax Settings -->
+                <div class="flex items-center justify-between mt-2 pt-2 border-t">
+                    <div class="flex items-center space-x-2">
+                        <label class="text-sm text-gray-600">Tax %:</label>
+                        <input type="number" id="taxRate" value="13" min="0" max="50" step="0.1" 
+                               class="w-16 px-2 py-1 text-xs border rounded" onchange="updateTaxRate()">
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <label class="text-sm text-gray-600">Discount:</label>
+                        <span class="text-sm font-medium text-orange-600" id="discountDisplay">$0.00</span>
+                    </div>
+                </div>
+                
+                <!-- Cart Selection Controls -->
+                <div class="flex items-center justify-between mt-3 pt-3 border-t">
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" id="selectAll" class="w-4 h-4 text-purple-600 rounded">
+                        <label for="selectAll" class="text-sm text-gray-600">Select All</label>
+                    </div>
+                    <button id="deleteSelected" class="text-red-500 hover:text-red-700 text-sm" disabled>
+                        <i class="fas fa-trash mr-1"></i>Delete Selected
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Scrollable Cart Items -->
+            <div class="scrollable-cart px-4 py-2">
+                <div id="cartItems" class="space-y-2">
+                    <!-- Cart items will be dynamically added here -->
+                </div>
+            </div>
+            <!-- Fixed Total Section -->
+            <div class="bg-gray-50 px-2 border-t mt-auto">
+                <div class="space-y-1 flex items-center justify-between">
+                    <div class="flex gap-1 justify-between text-sm">
+                        <span class="text-gray-600">Subtotal:</span>
+                        <span class="font-xs"><span id="subtotal">0.00</span></span>
+                    </div>
+                    <div class="flex gap-1 justify-between text-sm">
+                        <span class="text-gray-600">Discount:</span>
+                        <span class="font-xs text-orange-600">-<span id="discount">0.00</span></span>
+                    </div>
+                    <div class="flex gap-1 justify-between text-sm">
+                        <span class="text-gray-600">Tax (<span id="taxDisplay">13</span>%):</span>
+                        <span class="font-xs"><span id="tax">0.00</span></span>
+                    </div>
+                    <div class="">
+                        <div class="flex gap-1 justify-between items-center">
+                            <span class="text-lg font-bold text-gray-800">Total:</span>
+                            <span class="text-xl font-bold text-purple-600"><span id="total">0.00</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Calculator -->
+            <div class="p-2">
+                <!-- Calculator Display -->
+                <div class="calculator-display1 rounded p-1 text-right relative">
+                    <div class="flex justify-between items-center ">
+                        <div class="mode-indicator" id="modeIndicator">PAYMENT</div>
+                        <div class="flex gap-4 items-center">
+                            <div class="text-xs text-green-900">Amount</div>
+                            <div id="calculatorDisplay" class="text-xl">$0.00</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded p-2">
+                    <div class="grid grid-cols-4 gap-1 mb-2">
+                        <button onclick="inputNumber('1')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">1</button>
+                        <button onclick="inputNumber('2')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">2</button>
+                        <button onclick="inputNumber('3')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">3</button>
+                        <button onclick="setQuantityMode()" class="calculator-btn bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded text-xs font-medium">Qty</button>
+                        
+                        <button onclick="inputNumber('4')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">4</button>
+                        <button onclick="inputNumber('5')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">5</button>
+                        <button onclick="inputNumber('6')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">6</button>
+                        <button onclick="setDiscountMode()" class="calculator-btn bg-orange-500 hover:bg-orange-600 text-white py-2 px-3 rounded text-xs font-medium">Disc</button>
+                        
+                        <button onclick="inputNumber('7')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">7</button>
+                        <button onclick="inputNumber('8')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">8</button>
+                        <button onclick="inputNumber('9')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">9</button>
+                        <button onclick="setPriceMode()" class="calculator-btn bg-green-500 hover:bg-green-600 text-white py-2 px-3 rounded text-xs font-medium">Price</button>
+                        
+                        <button onclick="applyCalculatorValue()" class="calculator-btn bg-purple-500 hover:bg-purple-600 text-white py-2 px-3 rounded text-sm font-medium">Apply</button>
+                        <button onclick="inputNumber('0')" class="calculator-btn bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 rounded text-lg font-medium">0</button>
+                        <button onclick="inputDecimal()" class="calculator-btn bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-3 rounded text-lg font-medium">.</button>
+                        <button onclick="clearCalculator()" class="calculator-btn bg-red-500 hover:bg-red-600 text-white py-2 px-3 rounded text-lg font-medium">⌫</button>
+                    </div>
+                </div>
+                
+                <div class="flex gap-2 mt-3">
+                    <!-- Payment Button -->
+                    <button onclick="processPayment()" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-semibold text-sm transition-colors">
+                        <i class="fas fa-credit-card mr-1"></i>Payment
+                    </button>
+                    <!-- K.O.T Button -->
+                    <button onclick="processKOT()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-semibold text-sm transition-colors">
+                        <i class="fas fa-clipboard-list mr-1"></i>K.O.T
+                    </button>
+                    <!-- Bill Button -->
+                    <button onclick="processBill()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg font-semibold text-sm transition-colors">
+                        <i class="fas fa-receipt mr-1"></i>Bill
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Section - Products -->
+        <div class="w-[60%] bg-gray-50 flex flex-col">
+            <!-- Header -->
+            <div class="bg-white shadow-sm p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <button class="text-gray-600 hover:text-gray-800" onclick="showTableStatus()">
+                            <i class="fas fa-table"></i>
+                            <span class="text-gray-600">Tables</span>
+                        </button>
+                        <div class="flex items-center space-x-2 ml-8">
+                            <i class="fas fa-home text-gray-600"></i>
+                            <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
+                            <select id="categorySelect" class="bg-transparent border-none text-gray-800 font-medium focus:outline-none cursor-pointer">
+                                <option value="all">All Categories</option>
+                                <option value="burgers">Burgers</option>
+                                <option value="sandwiches">Sandwiches</option>
+                                <option value="pizza">Pizza</option>
+                                <option value="pasta">Pasta</option>
+                                <option value="lunch">Lunch Specials</option>
+                                <option value="drinks">Drinks</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="relative">
+                            <input type="text" id="searchInput" placeholder="Search product" class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-64 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                <span class="text-white text-sm font-semibold">A</span>
+                            </div>
+                            <span class="text-sm font-medium text-gray-800">Admin</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Products Grid -->
+            <div class="flex-1 p-6 overflow-y-auto">
+                <div id="productsGrid" class="grid grid-cols-4 gap-4">
+                    <!-- Products will be dynamically loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table Status Modal -->
+    <div id="tableModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">Table Status</h3>
+                <button onclick="closeTableModal()" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="tableStatusGrid" class="grid grid-cols-5 gap-4">
+                <!-- Table status will be shown here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Product Data
+        const products = [
+            {id: 1, name: 'Bacon Burger', price: 8.63, category: 'burgers', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300', description: 'Juicy beef patty with crispy bacon and fresh lettuce'},
+            {id: 2, name: 'Cheese Burger', price: 8.05, category: 'burgers', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=300', description: 'Classic cheeseburger with melted cheddar'},
+            {id: 3, name: 'Chicken Curry Sandwich', price: 3.45, category: 'sandwiches', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=300', description: 'Spicy chicken curry with fresh vegetables'},
+            {id: 4, name: 'Club Sandwich', price: 3.91, category: 'sandwiches', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=300', description: 'Triple-layered sandwich with turkey and bacon'},
+            {id: 5, name: 'Funghi Pizza', price: 8.05, category: 'pizza', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=300', description: 'Mushroom pizza with fresh herbs'},
+            {id: 6, name: 'Margherita Pizza', price: 8.05, category: 'pizza', image: 'https://images.unsplash.com/photo-1604068549290-dea0e4a305ca?w=300', description: 'Classic margherita with tomato and mozzarella'},
+            {id: 7, name: 'Vegetarian Pizza', price: 8.05, category: 'pizza', image: 'https://images.unsplash.com/photo-1571407970349-bc81e7e96d47?w=300', description: 'Fresh vegetables and herbs on crispy crust'},
+            {id: 8, name: 'Pasta 4 Formaggi', price: 6.33, category: 'pasta', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=300', description: 'Four cheese pasta with cream sauce'},
+            {id: 9, name: 'Pasta Bolognese', price: 5.18, category: 'pasta', image: 'https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=300', description: 'Traditional meat sauce pasta'},
+            {id: 10, name: 'Lunch Salmon 20pc', price: 15.87, category: 'lunch', image: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=300', description: 'Fresh salmon pieces with rice'},
+            {id: 11, name: 'Lunch Temaki mix 3pc', price: 16.10, category: 'lunch', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=300', description: 'Mixed temaki hand rolls'},
+            {id: 12, name: 'Spicy Tuna Sandwich', price: 3.45, category: 'sandwiches', image: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?w=300', description: 'Spicy tuna salad sandwich'},
+            {id: 13, name: 'Mozzarella Sandwich', price: 4.49, category: 'sandwiches', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=300', description: 'Fresh mozzarella with tomato and basil'},
+            {id: 14, name: 'Ice Tea', price: 2.53, category: 'drinks', image: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=300', description: 'Refreshing iced tea'},
+            {id: 15, name: 'Vegetarian Special', price: 8.05, category: 'lunch', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=300', description: 'Mixed vegetarian dishes'},
+            {id: 16, name: 'Salmon and Avocado', price: 10.64, category: 'lunch', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=300', description: 'Fresh salmon with avocado'},
+            {id: 17, name: 'Lunch Mix 18pc', price: 13.80, category: 'lunch', image: 'https://images.unsplash.com/photo-1553621042-f6e147245754?w=300', description: 'Mixed lunch items'},
+        ];
+
+        // System State
+        let cart = [];
+        let selectedItems = new Set();
+        let taxRate = 13;
+        let discountAmount = 0;
+        let lastSelectedItem = null;
+        
+        // Calculator state
+        let calculatorValue = 0;
+        let calculatorDisplay = '';
+        let calculatorMode = 'payment'; // 'payment', 'quantity', 'discount', 'price'
+
+        // Data Management
+        let memberOrders = new Map(); // memberid -> {cart, table, status, discount}
+        let tableReservations = new Map(); // table -> {member, status}
+        let memberDatabase = new Map([
+            ['12345', {name: 'Malik 124', cnic: '12345-6789012-3', phone: '555-0123'}],
+            ['67890', {name: 'Test 1', cnic: '67890-1234567-8', phone: '555-0456'}],
+            ['37283', {name: 'Test 2', cnic: '12345-6789012-3', phone: '555-0123', id: '12345'}],
+            ['73272', {name: 'Test 3', cnic: '67890-1234567-8', phone: '555-0456', id: '67890'}],
+            ['39200', {name: 'Test 4', id: '12345', phone: '555-0123'}],
+            ['82389', {name: 'Test 5', id: '67890', phone: '555-0456'}]
+        ]);
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            renderProducts();
+            updateCartDisplay();
+            setupEventListeners();
+            updateCalculatorDisplay();
+            updateTableStatusInHeader();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('searchInput').addEventListener('input', handleSearch);
+            document.getElementById('categorySelect').addEventListener('change', handleCategoryChange);
+            document.getElementById('selectAll').addEventListener('change', handleSelectAll);
+            document.getElementById('deleteSelected').addEventListener('click', deleteSelectedItems);
+        }
+
+        // Member and Table Management
+        function handleMemberSearch() {
+            const input = document.getElementById('memberSearch').value.trim().toLowerCase();
+            const suggestionsDiv = document.getElementById('memberSuggestions');
+            
+            if (!input) {
+                hideSuggestions();
+                return;
+            }
+            
+            // Filter members based on input
+            const suggestions = [];
+            memberDatabase.forEach((member, key) => {
+                if (key.toLowerCase().includes(input) || 
+                    member.name.toLowerCase().includes(input) ||
+                    (member.cnic && member.cnic.includes(input)) ||
+                    (member.id && member.id.toString().includes(input))) {
+                    suggestions.push({ key, ...member });
+                }
+            });
+            
+            if (suggestions.length > 0) {
+                showSuggestions(suggestions);
+            } else {
+                hideSuggestions();
+            }
+        }
+
+        function showSuggestions(suggestions) {
+            const suggestionsDiv = document.getElementById('memberSuggestions');
+            suggestionsDiv.innerHTML = '';
+            
+            suggestions.forEach(member => {
+                const suggestionItem = document.createElement('div');
+                suggestionItem.className = 'suggestions-item';
+                suggestionItem.innerHTML = `
+                    <div class="text-sm font-medium text-gray-800">${member.name}</div>
+                    <div class="text-xs text-gray-500">ID: ${member.id || member.key} | CNIC: ${member.cnic}</div>
+                `;
+                suggestionItem.onmousedown = () => selectMember(member.key);
+                suggestionsDiv.appendChild(suggestionItem);
+            });
+            
+            suggestionsDiv.classList.remove('hidden');
+        }
+
+        function hideSuggestions() {
+            setTimeout(() => {
+                document.getElementById('memberSuggestions').classList.add('hidden');
+            }, 150);
+        }
+
+        function selectMember(memberKey) {
+            document.getElementById('memberSearch').value = memberKey;
+            hideSuggestions();
+            loadMemberData();
+        }
+
+        function loadMemberData() {
+            const memberInput = document.getElementById('memberSearch').value.trim().toLowerCase();
+            if (!memberInput) {
+                clearCurrentSession();
+                return;
+            }
+
+            const member = memberDatabase.get(memberInput);
+            if (!member) {
+                showNotification('Member not found in database', 'error');
+                return;
+            }
+
+            const memberId = member.id || memberInput;
+            if (memberOrders.has(memberId)) {
+                const orderData = memberOrders.get(memberId);
+                cart = [...orderData.cart];
+                discountAmount = orderData.discount || 0;
+                
+                if (orderData.table) {
+                    document.getElementById('tableSelect').value = orderData.table;
+                }
+                
+                showMemberInfo(member, orderData);
+                updateCartDisplay();
+                showNotification(`Loaded existing order for ${member.name}`, 'info');
+            } else {
+                showMemberInfo(member, null);
+                showNotification(`Member ${member.name} loaded - New Order`, 'success');
+            }
+        }
+
+        function loadTableData() {
+            const tableNumber = document.getElementById('tableSelect').value;
+            if (!tableNumber) return;
+
+            if (tableReservations.has(tableNumber)) {
+                const reservation = tableReservations.get(tableNumber);
+                const memberId = reservation.member;
+                const member = findMemberById(memberId);
+                
+                if (member && memberOrders.has(memberId)) {
+                    document.getElementById('memberSearch').value = memberId;
+                    loadMemberData();
+                    showNotification(`Loaded table ${tableNumber} - ${member.name}`, 'info');
+                }
+            }
+        }
+
+        function showMemberInfo(member, orderData) {
+            const memberInfoDiv = document.getElementById('memberInfo');
+            const memberName = document.getElementById('memberName');
+            const memberDetails = document.getElementById('memberDetails');
+            const memberStatus = document.getElementById('memberStatus');
+
+            memberName.textContent = member.name;
+            memberDetails.textContent = `ID: ${member.id || 'N/A'} | CNIC: ${member.cnic} | Phone: ${member.phone}`;
+            
+            if (orderData) {
+                memberStatus.textContent = orderData.status === 'kot' ? 'KOT Sent' : 'Active Order';
+                if (orderData.table) {
+                    memberDetails.textContent += ` | Table: ${orderData.table}`;
+                }
+            } else {
+                memberStatus.textContent = 'New Order';
+            }
+            
+            memberInfoDiv.classList.remove('hidden');
+        }
+
+        function clearMemberData() {
+            document.getElementById('memberSearch').value = '';
+            document.getElementById('tableSelect').value = '';
+            clearCurrentSession();
+        }
+
+        function clearDiscount() {
+            discountAmount = 0;
+            updateCartDisplay();
+            showNotification('Discount cleared', 'success');
+        }
+
+        function clearCurrentSession() {
+            cart = [];
+            selectedItems.clear();
+            discountAmount = 0;
+            lastSelectedItem = null;
+            document.getElementById('memberInfo').classList.add('hidden');
+            updateCartDisplay();
+        }
+
+        function findMemberById(id) {
+            for (let [key, member] of memberDatabase) {
+                if (member.id === id || key === id) {
+                    return { ...member, id: member.id || id };
+                }
+            }
+            return null;
+        }
+
+        // KOT Processing
+        function processKOT() {
+            if (cart.length === 0) {
+                showNotification('Cart is empty. Please add items before processing KOT.', 'error');
+                return;
+            }
+
+            const memberInput = document.getElementById('memberSearch').value.trim();
+            const tableNumber = document.getElementById('tableSelect').value;
+
+            if (!memberInput || !tableNumber) {
+                showNotification('Please enter member information and select a table.', 'error');
+                return;
+            }
+
+            const member = memberDatabase.get(memberInput.toLowerCase());
+            if (!member) {
+                showNotification('Member not found in database.', 'error');
+                return;
+            }
+
+            // Check if table is available
+            if (tableReservations.has(tableNumber)) {
+                const reservation = tableReservations.get(tableNumber);
+                const currentMemberId = member.id || memberInput;
+                if (reservation.member !== currentMemberId) {
+                    showNotification(`Table ${tableNumber} is already reserved for another member.`, 'error');
+                    return;
+                }
+            }
+
+            const memberId = member.id || memberInput;
+            
+            // Reserve table and save order
+            tableReservations.set(tableNumber, {
+                member: memberId,
+                status: 'occupied',
+                timestamp: new Date()
+            });
+
+            memberOrders.set(memberId, {
+                cart: [...cart],
+                table: tableNumber,
+                status: 'kot',
+                discount: discountAmount,
+                timestamp: new Date()
+            });
+
+            showNotification(`KOT processed! Table ${tableNumber} reserved for ${member.name}`, 'success');
+            
+            // Clear current cart for next transaction
+            clearCurrentSession();
+            updateTableStatusInHeader();
+        }
+
+        // Bill Processing
+        function processBill() {
+            if (cart.length === 0) {
+                showNotification('Cart is empty. Please add items before processing bill.', 'error');
+                return;
+            }
+
+            const memberInput = document.getElementById('memberSearch').value.trim();
+            const tableNumber = document.getElementById('tableSelect').value;
+
+            if (!memberInput) {
+                showNotification('Please enter member information.', 'error');
+                return;
+            }
+
+            const member = memberDatabase.get(memberInput.toLowerCase());
+            if (!member) {
+                showNotification('Member not found in database.', 'error');
+                return;
+            }
+
+            const memberId = member.id || memberInput;
+            const total = parseFloat(document.getElementById('total').textContent);
+
+            // Generate bill
+            let billContent = `\n=== RESTAURANT BILL ===\n`;
+            billContent += `Date: ${new Date().toLocaleString()}\n`;
+            billContent += `Member: ${member.name}\n`;
+            billContent += `ID: ${member.id || 'N/A'}\n`;
+            if (tableNumber) billContent += `Table: ${tableNumber}\n`;
+            billContent += `\n--- ITEMS ---\n`;
+            
+            cart.forEach(item => {
+                billContent += `${item.name} x${item.quantity} - ${(item.price * item.quantity).toFixed(2)}\n`;
+            });
+            
+            const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const tax = (subtotal - discountAmount) * (taxRate / 100);
+            
+            billContent += `\n--- TOTALS ---\n`;
+            billContent += `Subtotal: ${subtotal.toFixed(2)}\n`;
+            if (discountAmount > 0) billContent += `Discount: -${discountAmount.toFixed(2)}\n`;
+            billContent += `Tax (${taxRate}%): ${tax.toFixed(2)}\n`;
+            billContent += `Total: ${total.toFixed(2)}\n`;
+            billContent += `\nThank you for your visit!\n`;
+
+            alert(billContent);
+
+            // Free table and clear member order
+            if (tableNumber) {
+                tableReservations.delete(tableNumber);
+            }
+            memberOrders.delete(memberId);
+
+            showNotification(`Bill generated for ${member.name}. Table ${tableNumber} is now free.`, 'success');
+            
+            // Clear current session
+            clearCurrentSession();
+            updateTableStatusInHeader();
+        }
+
+        // Payment Processing
+        function processPayment() {
+            const total = parseFloat(document.getElementById('total').textContent);
+            const paidAmount = calculatorValue;
+            
+            if (cart.length === 0) {
+                showNotification('Cart is empty. Please add items before processing payment.', 'error');
+                return;
+            }
+            
+            if (paidAmount < total) {
+                showNotification(`Insufficient payment. Total: ${total.toFixed(2)}, Paid: ${paidAmount.toFixed(2)}`, 'error');
+                return;
+            }
+            
+            const change = paidAmount - total;
+            const memberInput = document.getElementById('memberSearch').value.trim();
+            const tableNumber = document.getElementById('tableSelect').value;
+            
+            let message = `Payment Processed Successfully!\n\n`;
+            message += `Total: ${total.toFixed(2)}\n`;
+            message += `Paid: ${paidAmount.toFixed(2)}\n`;
+            message += `Change: ${change.toFixed(2)}\n\n`;
+            
+            if (memberInput) {
+                const member = memberDatabase.get(memberInput.toLowerCase());
+                if (member) {
+                    message += `Member: ${member.name}\n`;
+                }
+            }
+            if (tableNumber) {
+                message += `Table: ${tableNumber}\n`;
+            }
+            
+            alert(message);
+            
+            // Clean up after payment
+            if (memberInput && tableNumber) {
+                const member = memberDatabase.get(memberInput.toLowerCase());
+                if (member) {
+                    const memberId = member.id || memberInput;
+                    memberOrders.delete(memberId);
+                    tableReservations.delete(tableNumber);
+                }
+            }
+            
+            // Reset everything
+            clearCurrentSession();
+            calculatorValue = 0;
+            calculatorDisplay = '';
+            updateCalculatorDisplay();
+            updateTableStatusInHeader();
+        }
+
+        // Table Status Management
+        function showTableStatus() {
+            const modal = document.getElementById('tableModal');
+            const grid = document.getElementById('tableStatusGrid');
+            
+            grid.innerHTML = '';
+            
+            for (let i = 1; i <= 10; i++) {
+                const tableDiv = document.createElement('div');
+                const isReserved = tableReservations.has(i.toString());
+                const reservation = isReserved ? tableReservations.get(i.toString()) : null;
+                
+                tableDiv.className = `p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    isReserved ? 'reserved-table' : 'bg-white border-gray-200 hover:border-purple-500'
+                }`;
+                
+                tableDiv.innerHTML = `
+                    <div class="text-center">
+                        <div class="text-2xl font-bold mb-2">Table ${i}</div>
+                        ${isReserved ? 
+                            `<div class="text-sm text-orange-800 font-medium">OCCUPIED</div>
+                             <div class="text-xs text-orange-600 mt-1">${findMemberById(reservation.member)?.name || 'Unknown'}</div>
+                             <div class="text-xs text-gray-500 mt-1">${reservation.timestamp.toLocaleTimeString()}</div>` :
+                            `<div class="text-sm text-green-600 font-medium">AVAILABLE</div>`
+                        }
+                    </div>
+                `;
+                
+                if (isReserved) {
+                    tableDiv.onclick = () => {
+                        document.getElementById('tableSelect').value = i.toString();
+                        document.getElementById('memberSearch').value = reservation.member;
+                        loadMemberData();
+                        closeTableModal();
+                    };
+                }
+                
+                grid.appendChild(tableDiv);
+            }
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeTableModal() {
+            const modal = document.getElementById('tableModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function updateTableStatusInHeader() {
+            const occupiedTables = tableReservations.size;
+            // You can add visual indicators here if needed
+        }
+
+        // Product Management
+        function renderProducts(filteredProducts = products) {
+            const grid = document.getElementById('productsGrid');
+            grid.innerHTML = '';
+
+            filteredProducts.forEach(product => {
+                const card = document.createElement('div');
+                card.className = 'product-card bg-white rounded-lg shadow-sm border relative overflow-hidden';
+                
+                card.innerHTML = `
+                    <div class="relative">
+                        <img src="${product.image}" alt="${product.name}" class="w-full h-24 object-cover">
+                        <div class="absolute top-2 right-2 bg-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                            1
+                        </div>
+                    </div>
+                    <div class="p-3">
+                        <h3 class="font-medium text-gray-800 text-sm mb-1 line-clamp-2">${product.name}</h3>
+                        <p class="text-purple-600 font-bold text-sm mb-2">${product.price.toFixed(2)}</p>
+                        <button onclick="addProductToCart(${product.id})" 
+                                class="w-full bg-purple-500 hover:bg-purple-600 text-white py-1.5 px-2 rounded text-xs font-medium transition-colors">
+                            <i class="fas fa-plus mr-1"></i>Add to Cart
+                        </button>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            });
+        }
+
+        function addProductToCart(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+            
+            const existingItem = cart.find(item => item.id === productId);
+            
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({
+                    ...product,
+                    quantity: 1
+                });
+            }
+            
+            updateCartDisplay();
+        }
+
+        function handleSearch() {
+            filterProducts();
+        }
+
+        function handleCategoryChange() {
+            filterProducts();
+        }
+
+        function filterProducts() {
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const category = document.getElementById('categorySelect').value;
+            
+            let filtered = products;
+            
+            if (category !== 'all') {
+                filtered = filtered.filter(p => p.category === category);
+            }
+            
+            if (query !== '') {
+                filtered = filtered.filter(p => 
+                    p.name.toLowerCase().includes(query) ||
+                    p.category.toLowerCase().includes(query)
+                );
+            }
+            
+            renderProducts(filtered);
+        }
+
+        // Cart Management
+        function handleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const itemCheckboxes = document.querySelectorAll('.item-checkbox');
+            
+            if (selectAllCheckbox.checked) {
+                selectedItems.clear();
+                cart.forEach(item => selectedItems.add(item.id));
+                itemCheckboxes.forEach(checkbox => checkbox.checked = true);
+            } else {
+                selectedItems.clear();
+                itemCheckboxes.forEach(checkbox => checkbox.checked = false);
+            }
+            
+            updateDeleteButtonState();
+        }
+
+        function handleItemSelect(itemId, checked) {
+            if (checked) {
+                selectedItems.add(itemId);
+            } else {
+                selectedItems.delete(itemId);
+            }
+            
+            const selectAllCheckbox = document.getElementById('selectAll');
+            if (selectedItems.size === cart.length && cart.length > 0) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else if (selectedItems.size === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+            
+            updateDeleteButtonState();
+        }
+
+        function updateDeleteButtonState() {
+            const deleteButton = document.getElementById('deleteSelected');
+            deleteButton.disabled = selectedItems.size === 0;
+            deleteButton.className = selectedItems.size === 0 
+                ? "text-gray-400 text-sm cursor-not-allowed"
+                : "text-red-500 hover:text-red-700 text-sm cursor-pointer";
+        }
+
+        function deleteSelectedItems() {
+            if (selectedItems.size === 0) return;
+            
+            cart = cart.filter(item => !selectedItems.has(item.id));
+            selectedItems.clear();
+            
+            const selectAllCheckbox = document.getElementById('selectAll');
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+            
+            updateCartDisplay();
+        }
+
+        function removeFromCart(productId) {
+            cart = cart.filter(item => item.id !== productId);
+            selectedItems.delete(productId);
+            updateCartDisplay();
+        }
+
+        function updateQuantity(productId, change) {
+            const item = cart.find(item => item.id === productId);
+            if (item) {
+                item.quantity += change;
+                if (item.quantity <= 0) {
+                    removeFromCart(productId);
+                } else {
+                    updateCartDisplay();
+                }
+            }
+        }
+
+        function selectItemForCalculator(itemId) {
+            lastSelectedItem = itemId;
+            // Highlight selected item
+            document.querySelectorAll('.cart-item').forEach(item => {
+                item.classList.remove('ring-2', 'ring-blue-500');
+            });
+            document.querySelector(`[data-item-id="${itemId}"]`)?.classList.add('ring-2', 'ring-blue-500');
+        }
+
+        function updateCartDisplay() {
+            const cartContainer = document.getElementById('cartItems');
+            cartContainer.innerHTML = '';
+
+            if (cart.length === 0) {
+                cartContainer.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-shopping-cart text-3xl mb-3"></i>
+                        <p>Your cart is empty</p>
+                        <p class="text-sm">Add items from the menu</p>
+                    </div>
+                `;
+            } else {
+                cart.forEach(item => {
+                    const cartItem = document.createElement('div');
+                    cartItem.className = 'cart-item bg-white rounded border p-3 cursor-pointer hover:shadow-md transition-all';
+                    cartItem.setAttribute('data-item-id', item.id);
+                    cartItem.onclick = () => selectItemForCalculator(item.id);
+                    
+                    cartItem.innerHTML = `
+                        <div class="flex items-start space-x-3">
+                            <input type="checkbox" class="item-checkbox w-4 h-4 text-purple-600 mt-1" 
+                                   onchange="handleItemSelect(${item.id}, this.checked)"
+                                   ${selectedItems.has(item.id) ? 'checked' : ''}
+                                   onclick="event.stopPropagation()">
+                            <img src="${item.image}" alt="${item.name}" class="w-10 h-10 object-cover rounded">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-4">
+                                    <h4 class="font-medium text-gray-800 text-sm truncate">${item.name}</h4>
+                                    <span class="text-xs text-gray-500">${item.quantity.toFixed(2)} Units x ${item.price.toFixed(2)} / Units</span>
+                                </div>
+                                <div class="flex items-center space-x-2 mt-1">
+                                    <p class="text-purple-600 font-bold text-sm">${(item.price * item.quantity).toFixed(2)}</p>
+                                    <div class="text-xs text-orange-400 mt-1">
+                                        <i class="fas fa-square mr-1"></i>Click to modify
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end space-y-1">
+                                <button onclick="removeFromCart(${item.id}); event.stopPropagation();" class="text-red-500 hover:text-red-700">
+                                    <i class="fas fa-trash text-xs"></i>
+                                </button>
+                                <div class="flex items-center space-x-1">
+                                    <button onclick="updateQuantity(${item.id}, -1); event.stopPropagation();" class="bg-gray-200 hover:bg-gray-300 w-5 h-5 rounded flex items-center justify-center text-xs">-</button>
+                                    <span class="text-xs font-medium w-6 text-center">${item.quantity}</span>
+                                    <button onclick="updateQuantity(${item.id}, 1); event.stopPropagation();" class="bg-gray-200 hover:bg-gray-300 w-5 h-5 rounded flex items-center justify-center text-xs">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    cartContainer.appendChild(cartItem);
+                });
+            }
+
+            // Update totals
+            const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const discountedSubtotal = subtotal - discountAmount;
+            const tax = Math.max(0, discountedSubtotal * (taxRate / 100));
+            const total = discountedSubtotal + tax;
+
+            document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+            document.getElementById('discount').textContent = discountAmount.toFixed(2);
+            document.getElementById('discountDisplay').textContent = `${discountAmount.toFixed(2)}`;
+            document.getElementById('tax').textContent = tax.toFixed(2);
+            document.getElementById('total').textContent = total.toFixed(2);
+            document.getElementById('taxDisplay').textContent = taxRate.toFixed(1);
+            
+            // Update select all checkbox state
+            const selectAllCheckbox = document.getElementById('selectAll');
+            if (cart.length === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (selectedItems.size === cart.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else if (selectedItems.size === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+            
+            updateDeleteButtonState();
+        }
+
+        // Calculator Functions
+        function inputNumber(num) {
+            if (calculatorDisplay === '0' || calculatorDisplay === '') {
+                calculatorDisplay = num;
+            } else {
+                calculatorDisplay += num;
+            }
+            calculatorValue = parseFloat(calculatorDisplay) || 0;
+            updateCalculatorDisplay();
+        }
+
+        function inputDecimal() {
+            if (!calculatorDisplay.includes('.')) {
+                calculatorDisplay += calculatorDisplay === '' ? '0.' : '.';
+                updateCalculatorDisplay();
+            }
+        }
+
+        function clearCalculator() {
+            calculatorValue = 0;
+            calculatorDisplay = '';
+            updateCalculatorDisplay();
+        }
+
+        function setQuantityMode() {
+            calculatorMode = 'quantity';
+            updateModeIndicator();
+        }
+
+        function setDiscountMode() {
+            calculatorMode = 'discount';
+            updateModeIndicator();
+        }
+
+        function setPriceMode() {
+            calculatorMode = 'price';
+            updateModeIndicator();
+        }
+
+        function updateModeIndicator() {
+            const indicator = document.getElementById('modeIndicator');
+            const modes = {
+                'payment': 'PAYMENT',
+                'quantity': 'QUANTITY',
+                'discount': 'DISCOUNT',
+                'price': 'PRICE'
+            };
+            indicator.textContent = modes[calculatorMode];
+        }
+
+        function applyCalculatorValue() {
+            if (calculatorValue < 0) return;
+
+            switch (calculatorMode) {
+                case 'quantity':
+                    if (lastSelectedItem) {
+                        const item = cart.find(item => item.id === lastSelectedItem);
+                        if (item && calculatorValue > 0) {
+                            item.quantity = calculatorValue;
+                            updateCartDisplay();
+                            showNotification(`Quantity updated to ${calculatorValue}`, 'success');
+                        }
+                    } else {
+                        showNotification('Please select an item first', 'error');
+                    }
+                    break;
+
+                case 'discount':
+                    discountAmount = calculatorValue;
+                    updateCartDisplay();
+                    showNotification(`Discount applied: ${calculatorValue.toFixed(2)}`, 'success');
+                    break;
+
+                case 'price':
+                    if (lastSelectedItem) {
+                        const item = cart.find(item => item.id === lastSelectedItem);
+                        if (item && calculatorValue > 0) {
+                            item.price = calculatorValue;
+                            updateCartDisplay();
+                            showNotification(`Price updated to ${calculatorValue.toFixed(2)}`, 'success');
+                        }
+                    } else {
+                        showNotification('Please select an item first', 'error');
+                    }
+                    break;
+
+                case 'payment':
+                    // For payment mode, the value is just held for payment processing
+                    showNotification(`Payment amount set to ${calculatorValue.toFixed(2)}`, 'info');
+                    break;
+            }
+
+            // Don't reset calculator for payment mode to allow payment processing
+            if (calculatorMode !== 'payment') {
+                clearCalculator();
+                calculatorMode = 'payment';
+                updateModeIndicator();
+            }
+        }
+
+        function updateCalculatorDisplay() {
+            const display = document.getElementById('calculatorDisplay');
+            const value = calculatorDisplay === '' ? '0.00' : parseFloat(calculatorDisplay || 0).toFixed(2);
+            display.textContent = `${value}`;
+        }
+
+        function updateTaxRate() {
+            taxRate = parseFloat(document.getElementById('taxRate').value) || 0;
+            updateCartDisplay();
+        }
+
+        // Notification System
+        let notificationTimeout = null;
+        
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            
+            // Clear any existing timeout
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+            }
+            
+            // Remove existing classes and hide notification
+            notification.classList.remove('show', 'success', 'error', 'info');
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateX(100%)';
+            
+            // Set message and type
+            notification.textContent = message;
+            notification.classList.add(type);
+            
+            // Show notification with animation
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 10);
+            
+            // Auto-hide after 3 seconds
+            notificationTimeout = setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Keyboard support
+        document.getElementById('searchInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                this.value = '';
+                renderProducts();
+            }
+        });
+
+        // Click outside modal to close
+        document.getElementById('tableModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeTableModal();
+            }
+        });
+    </script>
+</body>
+</html>
