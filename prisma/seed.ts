@@ -62,12 +62,22 @@ const categories = [
   },
 ] as const;
 
+const salesmen = [{ name: "Ali" }, { name: "Bilal" }, { name: "Usman" }, { name: "Ahmed" }] as const;
+
 async function main() {
   for (const category of categories) {
     await prisma.category.upsert({
       where: { number: category.number },
       update: { name: category.name, imageUrl: category.imageUrl },
       create: category,
+    });
+  }
+
+  for (const salesman of salesmen) {
+    await prisma.salesman.upsert({
+      where: { name: salesman.name },
+      update: {},
+      create: salesman,
     });
   }
 }

@@ -11,10 +11,16 @@ type Category = {
   imageUrl: string;
 };
 
+type Salesman = {
+  id: number;
+  name: string;
+};
+
 type SaleItem = {
   categoryId: number;
   categoryName: string;
   amount: number;
+  discount: number;
 };
 
 function generateSaleId() {
@@ -28,12 +34,15 @@ function generateSaleId() {
   return `SAL-${datePart}-${randomPart}`;
 }
 
-const keypadItems = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "DEL"] as const;
+const keypadItems = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "DEL"] as const;
 
 export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [salesmen, setSalesmen] = useState<Salesman[]>([]);
+  const [selectedSalesmanId, setSelectedSalesmanId] = useState<number | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [amountInput, setAmountInput] = useState("");
+  const [discountInput, setDiscountInput] = useState("");
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [saleId, setSaleId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -48,6 +57,7 @@ export default function Home() {
   useEffect(() => {
     setSaleId(generateSaleId());
     void fetchCategories();
+    void fetchSalesmen();
   }, []);
 
   useEffect(() => {
@@ -66,6 +76,19 @@ export default function Home() {
     }
   }
 
+  async function fetchSalesmen() {
+    try {
+      const response = await fetch("/api/salesmen", { cache: "no-store" });
+      const data = (await response.json()) as { salesmen: Salesman[] };
+      setSalesmen(data.salesmen ?? []);
+      if ((data.salesmen ?? []).length > 0) {
+        setSelectedSalesmanId(data.salesmen[0].id);
+      }
+    } catch {
+      setFeedback({ type: "error", text: "Unable to load salesmen." });
+    }
+  }
+
   function handleKeypadTap(key: (typeof keypadItems)[number]) {
     setFeedback(null);
     setAmountInput((previous) => {
@@ -73,11 +96,11 @@ export default function Home() {
         return previous.slice(0, -1);
       }
 
-      if (key === ".") {
-        if (previous.includes(".")) {
-          return previous;
+      if (key === "00") {
+        if (previous === "" || previous === "0") {
+          return "0";
         }
-        return previous === "" ? "0." : `${previous}.`;
+        return `${previous}00`;
       }
 
       if (previous === "0") {
@@ -89,6 +112,7 @@ export default function Home() {
 
   function clearForm() {
     setAmountInput("");
+    setDiscountInput("");
     setSelectedCategoryId(null);
     setSaleItems([]);
     setFeedback(null);
@@ -105,6 +129,11 @@ export default function Home() {
       setFeedback({ type: "error", text: "Please enter a valid amount." });
       return;
     }
+    const parsedDiscount = discountInput.trim() === "" ? 0 : Number(discountInput);
+    if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0 || parsedDiscount > parsedAmount) {
+      setFeedback({ type: "error", text: "Discount must be between 0 and amount." });
+      return;
+    }
 
     if (!selectedCategory) {
       setFeedback({ type: "error", text: "Selected category is invalid." });
@@ -117,9 +146,11 @@ export default function Home() {
         categoryId: selectedCategory.id,
         categoryName: selectedCategory.name,
         amount: parsedAmount,
+        discount: parsedDiscount,
       },
     ]);
     setAmountInput("");
+    setDiscountInput("");
     setSelectedCategoryId(null);
     setFeedback({ type: "success", text: "Item added to the sale list." });
   }
@@ -129,7 +160,7 @@ export default function Home() {
   }
 
   const saleTotal = useMemo(
-    () => saleItems.reduce((sum, item) => sum + item.amount, 0),
+    () => saleItems.reduce((sum, item) => sum + (item.amount - item.discount), 0),
     [saleItems],
   );
   const visibleItems = saleItems.slice(0, 4);
@@ -138,6 +169,10 @@ export default function Home() {
   async function saveSale() {
     if (saleItems.length === 0) {
       setFeedback({ type: "error", text: "Add at least one item before saving." });
+      return;
+    }
+    if (!selectedSalesmanId) {
+      setFeedback({ type: "error", text: "Please select a salesman before saving." });
       return;
     }
 
@@ -150,9 +185,11 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           saleId,
+          salesmanId: selectedSalesmanId,
           items: saleItems.map((item) => ({
             categoryId: item.categoryId,
             amount: item.amount,
+            discount: item.discount,
           })),
         }),
       });
@@ -165,6 +202,7 @@ export default function Home() {
       setFeedback({ type: "success", text: "Sale saved successfully." });
       setSaleId(generateSaleId());
       setAmountInput("");
+      setDiscountInput("");
       setSelectedCategoryId(null);
       setSaleItems([]);
     } catch (error) {
@@ -228,6 +266,22 @@ export default function Home() {
               </label>
 
               <label className="block text-sm font-medium text-slate-700">
+                Salesman
+                <select
+                  value={selectedSalesmanId ?? ""}
+                  onChange={(event) => setSelectedSalesmanId(Number(event.target.value))}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                >
+                  {salesmen.length === 0 ? <option value="">No salesman found</option> : null}
+                  {salesmen.map((salesman) => (
+                    <option key={salesman.id} value={salesman.id}>
+                      {salesman.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-sm font-medium text-slate-700">
                 Amount
                 <input
                   ref={amountInputRef}
@@ -236,6 +290,18 @@ export default function Home() {
                   onKeyDown={handleAmountKeyDown}
                   placeholder="0.00"
                   inputMode="decimal"
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </label>
+
+              <label className="block text-sm font-medium text-slate-700">
+                Discount
+                <input
+                  value={discountInput}
+                  onChange={(event) => setDiscountInput(event.target.value)}
+                  onKeyDown={handleAmountKeyDown}
+                  placeholder="0"
+                  inputMode="numeric"
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
                 />
               </label>
@@ -319,7 +385,10 @@ export default function Home() {
                     >
                       <div>
                         <p className="text-sm font-medium text-slate-800">{item.categoryName}</p>
-                        <p className="text-xs text-slate-500">{item.amount.toFixed(2)}</p>
+                        <p className="text-xs text-slate-500">
+                          {item.amount.toFixed(2)} - {item.discount.toFixed(2)} ={" "}
+                          {(item.amount - item.discount).toFixed(2)}
+                        </p>
                       </div>
                       <button
                         type="button"

@@ -7,12 +7,16 @@ type CategorySummary = {
   categoryId: number;
   number: number;
   name: string;
+  grossAmount: number;
+  totalDiscount: number;
   totalAmount: number;
   totalSales: number;
 };
 
 type SalesSummaryResponse = {
   overall: {
+    grossAmount: number;
+    totalDiscount: number;
     totalAmount: number;
     totalSales: number;
   };
@@ -21,7 +25,7 @@ type SalesSummaryResponse = {
 
 export default function CategorySalesPage() {
   const [summary, setSummary] = useState<SalesSummaryResponse>({
-    overall: { totalAmount: 0, totalSales: 0 },
+    overall: { grossAmount: 0, totalDiscount: 0, totalAmount: 0, totalSales: 0 },
     byCategory: [],
   });
   const [loading, setLoading] = useState(true);
@@ -73,7 +77,9 @@ export default function CategorySalesPage() {
                   <th className="py-2 pr-3">#</th>
                   <th className="py-2 pr-3">Category</th>
                   <th className="py-2 pr-3">Total Items</th>
-                  <th className="py-2 text-right">Total Amount</th>
+                  <th className="py-2 text-right">Gross</th>
+                  <th className="py-2 text-right">Discount</th>
+                  <th className="py-2 text-right">Net Amount</th>
                 </tr>
               </thead>
               <tbody>
@@ -82,6 +88,12 @@ export default function CategorySalesPage() {
                     <td className="py-2 pr-3 text-slate-600">{item.number}</td>
                     <td className="py-2 pr-3 font-medium text-slate-800">{item.name}</td>
                     <td className="py-2 pr-3 text-slate-600">{item.totalSales}</td>
+                    <td className="py-2 text-right font-semibold text-slate-800">
+                      {item.grossAmount.toFixed(2)}
+                    </td>
+                    <td className="py-2 text-right font-semibold text-slate-800">
+                      {item.totalDiscount.toFixed(2)}
+                    </td>
                     <td className="py-2 text-right font-semibold text-slate-800">
                       {item.totalAmount.toFixed(2)}
                     </td>
@@ -94,6 +106,8 @@ export default function CategorySalesPage() {
                     <span className="font-semibold">Overall</span>
                   </td>
                   <td className="pt-3 font-semibold">{summary.overall.totalSales}</td>
+                  <td className="pt-3 text-right font-bold">{summary.overall.grossAmount.toFixed(2)}</td>
+                  <td className="pt-3 text-right font-bold">{summary.overall.totalDiscount.toFixed(2)}</td>
                   <td className="pt-3 text-right font-bold">{summary.overall.totalAmount.toFixed(2)}</td>
                 </tr>
               </tfoot>

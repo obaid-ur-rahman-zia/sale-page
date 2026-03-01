@@ -4,11 +4,13 @@ import { prisma } from "@/lib/prisma";
 
 type CreateSalePayload = {
   saleId?: string;
+  salesmanId?: number;
   categoryId?: number;
   amount?: number;
   items?: Array<{
     categoryId?: number;
     amount?: number;
+    discount?: number;
   }>;
 };
 
@@ -27,17 +29,19 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as CreateSalePayload;
     const saleId = body.saleId?.trim() || generateSaleId();
+    const salesmanId = Number(body.salesmanId);
     const items =
       body.items?.map((item) => ({
         categoryId: Number(item.categoryId),
         amount: Number(item.amount),
+        discount: Number(item.discount ?? 0),
       })) ?? [];
 
     if (items.length === 0) {
       const categoryId = Number(body.categoryId);
       const amount = Number(body.amount);
       if (Number.isFinite(categoryId) && Number.isFinite(amount)) {
-        items.push({ categoryId, amount });
+        items.push({ categoryId, amount, discount: 0 });
       }
     }
 
@@ -50,11 +54,30 @@ export async function POST(request: Request) {
         !Number.isFinite(item.categoryId) ||
         item.categoryId <= 0 ||
         !Number.isFinite(item.amount) ||
-        item.amount <= 0,
+        item.amount <= 0 ||
+        !Number.isFinite(item.discount) ||
+        item.discount < 0 ||
+        item.discount > item.amount,
     );
 
     if (hasInvalidItem) {
-      return NextResponse.json({ message: "All items must have valid categoryId and amount" }, { status: 400 });
+      return NextResponse.json(
+        { message: "All items must have valid categoryId, amount, and discount" },
+        { status: 400 },
+      );
+    }
+
+    if (!Number.isFinite(salesmanId) || salesmanId <= 0) {
+      return NextResponse.json({ message: "Valid salesman is required" }, { status: 400 });
+    }
+
+    const salesman = await prisma.salesman.findUnique({
+      where: { id: salesmanId },
+      select: { id: true },
+    });
+
+    if (!salesman) {
+      return NextResponse.json({ message: "Salesman not found" }, { status: 404 });
     }
 
     const categoryIds = [...new Set(items.map((item) => item.categoryId))];
@@ -79,12 +102,16 @@ export async function POST(request: Request) {
             saleId,
             categoryId: item.categoryId,
             amount: item.amount,
+            discount: item.discount,
+            salesmanId,
           },
           select: {
             id: true,
             saleId: true,
             amount: true,
+            discount: true,
             categoryId: true,
+            salesmanId: true,
             createdAt: true,
           },
         }),

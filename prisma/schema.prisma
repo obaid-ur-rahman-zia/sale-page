@@ -19,15 +19,27 @@ model Category {
   updatedAt DateTime @updatedAt
 }
 
+model Salesman {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  sales     Sale[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Sale {
-  id         Int      @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
   saleId     String
   amount     Float
+  discount   Float     @default(0)
   categoryId Int
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  createdAt  DateTime @default(now())
+  category   Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  salesmanId Int?
+  salesman   Salesman? @relation(fields: [salesmanId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
 
   @@index([saleId])
+  @@index([salesmanId])
   @@index([categoryId, createdAt])
   @@index([createdAt])
 }

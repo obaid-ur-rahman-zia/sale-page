@@ -13,11 +13,11 @@ export async function GET() {
       }),
       prisma.sale.groupBy({
         by: ["categoryId"],
-        _sum: { amount: true },
+        _sum: { amount: true, discount: true },
         _count: { _all: true },
       }),
       prisma.sale.aggregate({
-        _sum: { amount: true },
+        _sum: { amount: true, discount: true },
         _count: { _all: true },
       }),
     ]);
@@ -26,7 +26,9 @@ export async function GET() {
       groupedSales.map((item) => [
         item.categoryId,
         {
-          totalAmount: item._sum.amount ?? 0,
+          grossAmount: item._sum.amount ?? 0,
+          totalDiscount: item._sum.discount ?? 0,
+          totalAmount: (item._sum.amount ?? 0) - (item._sum.discount ?? 0),
           totalSales: item._count._all,
         },
       ]),
@@ -38,6 +40,8 @@ export async function GET() {
         categoryId: category.id,
         number: category.number,
         name: category.name,
+        grossAmount: stats?.grossAmount ?? 0,
+        totalDiscount: stats?.totalDiscount ?? 0,
         totalAmount: stats?.totalAmount ?? 0,
         totalSales: stats?.totalSales ?? 0,
       };
@@ -45,7 +49,9 @@ export async function GET() {
 
     return NextResponse.json({
       overall: {
-        totalAmount: totals._sum.amount ?? 0,
+        grossAmount: totals._sum.amount ?? 0,
+        totalDiscount: totals._sum.discount ?? 0,
+        totalAmount: (totals._sum.amount ?? 0) - (totals._sum.discount ?? 0),
         totalSales: totals._count._all,
       },
       byCategory,
