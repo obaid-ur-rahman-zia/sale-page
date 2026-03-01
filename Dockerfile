@@ -9,9 +9,9 @@
     # Keep install layer cache-friendly
     COPY package.json package-lock.json* ./
     COPY prisma ./prisma
-    RUN npm ci --include=optional --no-audit --no-fund
-    # Fail-safe: ensure lightningcss native binary exists for Alpine musl.
-    RUN npm install --no-save --no-audit --no-fund lightningcss-linux-x64-musl@1.31.1
+    # Use npm install (not npm ci) to avoid npm optional dependency bug
+    # that can skip native bindings used by Tailwind/LightningCSS on Alpine.
+    RUN npm install --include=optional --no-audit --no-fund
     
     # ---------- Builder ----------
     FROM node:20-alpine AS builder
