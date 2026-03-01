@@ -10,6 +10,9 @@ RUN apt-get update \
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
 RUN npm ci --include=optional --no-audit --no-fund
+# Some CI/Docker environments skip transitive optional native package resolution.
+# Force install the Linux GNU binary required by lightningcss/Tailwind build.
+RUN npm install --no-save --no-audit --no-fund lightningcss-linux-x64-gnu@1.31.1
 
 # ---------- Builder ----------
 FROM node:20-bookworm-slim AS builder
