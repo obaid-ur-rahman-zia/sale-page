@@ -41,6 +41,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# Default SQLite path for Prisma CLI commands inside container terminal
+ENV DATABASE_URL=file:./prisma/dev.db
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
@@ -55,11 +57,15 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 # Include full node_modules so Prisma CLI + seed runtime
 # dependencies are available inside Dokploy terminal.
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json ./package.json
 COPY --from=deps /app/package-lock.json ./package-lock.json
+
+# Allow runtime migrations/seeding to write SQLite file.
+RUN chown -R nextjs:nodejs /app/prisma
 
 USER nextjs
 
