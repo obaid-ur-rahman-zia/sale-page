@@ -8,7 +8,9 @@
     # Keep install layer cache-friendly
     COPY package.json package-lock.json* ./
     COPY prisma ./prisma
-    RUN npm ci
+    # Use npm install (not npm ci) so platform-specific optional binaries
+    # like lightningcss linux musl can be resolved inside the Linux container.
+    RUN npm install --include=optional --no-audit --no-fund
     
     # ---------- Builder ----------
     FROM node:20-alpine AS builder
