@@ -23,6 +23,26 @@ type SaleItem = {
   discount: number;
 };
 
+type BillResponse = {
+  saleId: string;
+  salesman: { id: number; name: string } | null;
+  createdAt: string;
+  items: Array<{
+    id: number;
+    categoryId: number;
+    categoryNumber: number;
+    categoryName: string;
+    amount: number;
+    discount: number;
+    net: number;
+  }>;
+  totals: {
+    grossAmount: number;
+    totalDiscount: number;
+    netAmount: number;
+  };
+};
+
 function generateSaleId() {
   const now = new Date();
   const datePart = now
@@ -45,7 +65,10 @@ export default function Home() {
   const [discountInput, setDiscountInput] = useState("");
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [saleId, setSaleId] = useState("");
+  const [lastSavedSaleId, setLastSavedSaleId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [autoPrintAfterSave, setAutoPrintAfterSave] = useState(false);
+  const [preferredPrinter, setPreferredPrinter] = useState("");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
 
@@ -58,6 +81,14 @@ export default function Home() {
     setSaleId(generateSaleId());
     void fetchCategories();
     void fetchSalesmen();
+    const savedPrinter = window.localStorage.getItem("preferredPrinter");
+    if (savedPrinter) {
+      setPreferredPrinter(savedPrinter);
+    }
+    const autoPrintSaved = window.localStorage.getItem("autoPrintAfterSave");
+    if (autoPrintSaved === "1") {
+      setAutoPrintAfterSave(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -166,6 +197,99 @@ export default function Home() {
   const visibleItems = saleItems.slice(0, 4);
   const hiddenItemsCount = Math.max(0, saleItems.length - visibleItems.length);
 
+  function renderInvoiceHtml(bill: BillResponse) {
+    const rows = bill.items
+      .map(
+        (item) =>
+          `<tr>
+            <td>${item.categoryNumber}</td>
+            <td>${item.categoryName}</td>
+            <td style="text-align:right">${item.amount.toFixed(2)}</td>
+            <td style="text-align:right">${item.discount.toFixed(2)}</td>
+            <td style="text-align:right">${item.net.toFixed(2)}</td>
+          </tr>`,
+      )
+      .join("");
+
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Invoice ${bill.saleId}</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 16px; color: #111827; }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      .meta { margin-bottom: 12px; font-size: 12px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { border: 1px solid #d1d5db; padding: 6px; }
+      th { background: #f3f4f6; text-align: left; }
+      .totals { margin-top: 12px; font-size: 13px; }
+      .totals p { margin: 4px 0; text-align: right; }
+      .net { font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <h1>Sales Invoice</h1>
+    <div class="meta">
+      <div><strong>Sale ID:</strong> ${bill.saleId}</div>
+      <div><strong>Date:</strong> ${new Date(bill.createdAt).toLocaleString()}</div>
+      <div><strong>Salesman:</strong> ${bill.salesman?.name ?? "N/A"}</div>
+      <div><strong>Preferred Printer:</strong> ${preferredPrinter || "System Default"}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Category</th>
+          <th>Amount</th>
+          <th>Discount</th>
+          <th>Net</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="totals">
+      <p>Gross: ${bill.totals.grossAmount.toFixed(2)}</p>
+      <p>Discount: ${bill.totals.totalDiscount.toFixed(2)}</p>
+      <p class="net">Net: ${bill.totals.netAmount.toFixed(2)}</p>
+    </div>
+  </body>
+</html>`;
+  }
+
+  function printInvoice(bill: BillResponse) {
+    const printWindow = window.open("", "_blank", "width=900,height=700");
+    if (!printWindow) {
+      setFeedback({ type: "error", text: "Pop-up blocked. Please allow pop-ups to print invoices." });
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(renderInvoiceHtml(bill));
+    printWindow.document.close();
+    printWindow.focus();
+    // Browser security does not allow true silent printing or printer selection from web apps.
+    printWindow.print();
+    printWindow.close();
+  }
+
+  async function printPreviousBill() {
+    try {
+      const query = lastSavedSaleId
+        ? `saleId=${encodeURIComponent(lastSavedSaleId)}`
+        : "previous=1";
+      const response = await fetch(`/api/sales/bill?${query}`, { cache: "no-store" });
+      if (!response.ok) {
+        const errorData = (await response.json()) as { message?: string };
+        throw new Error(errorData.message ?? "Unable to load previous bill.");
+      }
+      const bill = (await response.json()) as BillResponse;
+      printInvoice(bill);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to print previous bill.";
+      setFeedback({ type: "error", text: message });
+    }
+  }
+
   async function saveSale() {
     if (saleItems.length === 0) {
       setFeedback({ type: "error", text: "Add at least one item before saving." });
@@ -179,12 +303,13 @@ export default function Home() {
     try {
       setSaving(true);
       setFeedback(null);
+      const currentSaleId = saleId;
 
       const response = await fetch("/api/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          saleId,
+          saleId: currentSaleId,
           salesmanId: selectedSalesmanId,
           items: saleItems.map((item) => ({
             categoryId: item.categoryId,
@@ -199,12 +324,26 @@ export default function Home() {
         throw new Error(errorData.message ?? "Unable to save sale.");
       }
 
-      setFeedback({ type: "success", text: "Sale saved successfully." });
+      setLastSavedSaleId(currentSaleId);
+      setFeedback({
+        type: "success",
+        text: "Sale saved successfully. Note: Browsers show a print dialog; silent print requires kiosk/native setup.",
+      });
       setSaleId(generateSaleId());
       setAmountInput("");
       setDiscountInput("");
       setSelectedCategoryId(null);
       setSaleItems([]);
+
+      if (autoPrintAfterSave) {
+        const billResponse = await fetch(`/api/sales/bill?saleId=${encodeURIComponent(currentSaleId)}`, {
+          cache: "no-store",
+        });
+        if (billResponse.ok) {
+          const bill = (await billResponse.json()) as BillResponse;
+          printInvoice(bill);
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unexpected error";
       setFeedback({ type: "error", text: message });
@@ -239,9 +378,13 @@ export default function Home() {
               <h1 className="text-xl font-semibold text-slate-900">Sale Entry</h1>
               <Link
                 href="/category-sales"
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                title="Category Sales Page"
               >
-                Category Sales Page
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
+                  <path d="M4 4h16v2H4V4zm2 5h3v11H6V9zm5 3h3v8h-3v-8zm5-5h3v13h-3V7z" />
+                </svg>
+                <span>{saleId}</span>
               </Link>
             </div>
 
@@ -305,6 +448,31 @@ export default function Home() {
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
                 />
               </label>
+
+              <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                <label className="flex items-center gap-2 text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={autoPrintAfterSave}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setAutoPrintAfterSave(checked);
+                      window.localStorage.setItem("autoPrintAfterSave", checked ? "1" : "0");
+                    }}
+                  />
+                  Auto-print invoice
+                </label>
+                <input
+                  value={preferredPrinter}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setPreferredPrinter(value);
+                    window.localStorage.setItem("preferredPrinter", value);
+                  }}
+                  placeholder="Preferred printer name"
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs outline-none"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -313,7 +481,7 @@ export default function Home() {
                   key={key}
                   type="button"
                   onClick={() => handleKeypadTap(key)}
-                  className="h-10 rounded-lg border border-slate-300 bg-slate-100 text-base font-semibold text-slate-800 transition hover:bg-slate-200"
+                  className="h-14 rounded-lg border border-slate-300 bg-slate-100 text-lg font-semibold text-slate-800 transition hover:bg-slate-200"
                 >
                   {key}
                 </button>
@@ -345,10 +513,10 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={printPreviousBill}
                 className="h-10 rounded-lg bg-indigo-600 text-sm font-semibold text-white transition hover:bg-indigo-700"
               >
-                Print
+                Previous Bill
               </button>
             </div>
 

@@ -4,8 +4,43 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+function buildDateRange(searchParams: URLSearchParams) {
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
+
+  if (!from && !to) {
+    return undefined;
+  }
+
+  const createdAt: { gte?: Date; lte?: Date } = {};
+
+  if (from) {
+    const fromDate = new Date(`${from}T00:00:00.000Z`);
+    if (!Number.isNaN(fromDate.getTime())) {
+      createdAt.gte = fromDate;
+    }
+  }
+
+  if (to) {
+    const toDate = new Date(`${to}T23:59:59.999Z`);
+    if (!Number.isNaN(toDate.getTime())) {
+      createdAt.lte = toDate;
+    }
+  }
+
+  if (!createdAt.gte && !createdAt.lte) {
+    return undefined;
+  }
+
+  return createdAt;
+}
+
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const createdAt = buildDateRange(searchParams);
+    const where = createdAt ? { createdAt } : undefined;
+
     const [categories, groupedSales, totals] = await Promise.all([
       prisma.category.findMany({
         orderBy: { number: "asc" },
@@ -13,10 +48,12 @@ export async function GET() {
       }),
       prisma.sale.groupBy({
         by: ["categoryId"],
+        where,
         _sum: { amount: true, discount: true },
         _count: { _all: true },
       }),
       prisma.sale.aggregate({
+        where,
         _sum: { amount: true, discount: true },
         _count: { _all: true },
       }),

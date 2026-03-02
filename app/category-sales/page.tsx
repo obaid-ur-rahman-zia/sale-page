@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type CategorySummary = {
   categoryId: number;
@@ -30,16 +30,21 @@ export default function CategorySalesPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-  useEffect(() => {
-    void loadSummary();
-  }, []);
-
-  async function loadSummary() {
+  const loadSummary = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("/api/sales/summary", { cache: "no-store" });
+      const query = new URLSearchParams();
+      if (fromDate) {
+        query.set("from", fromDate);
+      }
+      if (toDate) {
+        query.set("to", toDate);
+      }
+      const response = await fetch(`/api/sales/summary?${query.toString()}`, { cache: "no-store" });
       if (!response.ok) {
         throw new Error("Unable to load sales summary.");
       }
@@ -51,7 +56,11 @@ export default function CategorySalesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [fromDate, toDate]);
+
+  useEffect(() => {
+    void loadSummary();
+  }, [loadSummary]);
 
   return (
     <main className="min-h-screen p-4 md:p-6">
@@ -64,6 +73,37 @@ export default function CategorySalesPage() {
           >
             Back to Sale Page
           </Link>
+        </div>
+
+        <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-4">
+          <label className="text-sm text-slate-700">
+            From Date
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(event) => setFromDate(event.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none"
+            />
+          </label>
+          <label className="text-sm text-slate-700">
+            To Date
+            <input
+              type="date"
+              value={toDate}
+              onChange={(event) => setToDate(event.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setFromDate("");
+              setToDate("");
+            }}
+            className="h-10 self-end rounded border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            Clear Filters
+          </button>
         </div>
 
         {loading ? <p className="text-sm text-slate-500">Loading...</p> : null}
