@@ -389,27 +389,15 @@ export default function Home() {
             </div>
 
             <div className="space-y-3 rounded-xl border border-slate-200 p-3">
-              <label className="block text-sm font-medium text-slate-700">
-                Sale ID
-                <input
-                  value={saleId}
-                  readOnly
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none"
-                />
-              </label>
+            <div className="grid grid-cols-2 gap-2 items-center justify-between">
+              <input
+                value={selectedCategory?.name ?? ""}
+                readOnly
+                placeholder="Select a category from the right side"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none"
+              />
 
               <label className="block text-sm font-medium text-slate-700">
-                Category Name
-                <input
-                  value={selectedCategory?.name ?? ""}
-                  readOnly
-                  placeholder="Select a category from the right side"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none"
-                />
-              </label>
-
-              <label className="block text-sm font-medium text-slate-700">
-                Salesman
                 <select
                   value={selectedSalesmanId ?? ""}
                   onChange={(event) => setSelectedSalesmanId(Number(event.target.value))}
@@ -423,6 +411,8 @@ export default function Home() {
                   ))}
                 </select>
               </label>
+
+            </div>
 
               <label className="block text-sm font-medium text-slate-700">
                 Amount
@@ -488,7 +478,7 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={addItem}
@@ -522,11 +512,10 @@ export default function Home() {
 
             {feedback ? (
               <div
-                className={`rounded-lg border px-3 py-2 text-sm ${
-                  feedback.type === "success"
+                className={`rounded-lg border px-3 py-2 text-sm ${feedback.type === "success"
                     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                     : "border-red-200 bg-red-50 text-red-700"
-                }`}
+                  }`}
               >
                 {feedback.text}
               </div>
@@ -576,7 +565,7 @@ export default function Home() {
           </div>
         </section>
 
-        
+
         <section className="h-full">
           <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
             <h2 className="mb-3 text-lg font-semibold text-slate-900">Categories</h2>
@@ -588,11 +577,10 @@ export default function Home() {
                     key={category.id}
                     type="button"
                     onClick={() => setSelectedCategoryId(category.id)}
-                    className={`cursor-pointer rounded-xl border text-left transition ${
-                      isSelected
+                    className={`cursor-pointer rounded-xl border text-left transition ${isSelected
                         ? "border-blue-500 bg-blue-50"
                         : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
+                      }`}
                   >
                     <div className="relative h-20 w-full overflow-hidden rounded-t-xl">
                       <Image
