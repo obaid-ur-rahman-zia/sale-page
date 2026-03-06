@@ -415,19 +415,18 @@ export default function Home() {
             </div>
 
               <label className="block text-sm font-medium text-slate-700">
-                Amount
                 <input
                   ref={amountInputRef}
                   value={amountInput}
                   onChange={(event) => setAmountInput(event.target.value)}
                   onKeyDown={handleAmountKeyDown}
                   placeholder="0.00"
-                  inputMode="decimal"
+                  inputMode="none"
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
                 />
               </label>
 
-              <label className="block text-sm font-medium text-slate-700">
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                 Discount
                 <input
                   value={discountInput}
@@ -569,7 +568,7 @@ export default function Home() {
         <section className="h-full">
           <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
             <h2 className="mb-3 text-lg font-semibold text-slate-900">Categories</h2>
-            <div className="grid flex-1 grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {categories.map((category) => {
                 const isSelected = selectedCategoryId === category.id;
                 return (
