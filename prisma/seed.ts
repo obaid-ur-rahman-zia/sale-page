@@ -14,55 +14,61 @@ const categories = [
     number: 1,
     name: "Jewelry",
     imageUrl:
-      "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=600&q=80",
+      "/images/jewelry.jpg",
   },
   {
     number: 2,
     name: "Jhumki",
     imageUrl:
-      "https://images.unsplash.com/photo-1611085583191-a3b181a88401?auto=format&fit=crop&w=600&q=80",
+      "/images/jhumki.jpg",
   },
   {
     number: 3,
     name: "Bangles",
     imageUrl:
-      "https://images.unsplash.com/photo-1617038220319-276d3cfab638?auto=format&fit=crop&w=600&q=80",
+      "/images/bangles.webp",
   },
   {
     number: 4,
     name: "Bangle Set",
     imageUrl:
-      "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80",
+      "/images/bangles-set.jpg",
   },
   {
     number: 5,
     name: "Accessories",
     imageUrl:
-      "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&q=80",
+      "/images/accessories.webp",
   },
   {
     number: 6,
     name: "Makeup",
     imageUrl:
-      "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=600&q=80",
+      "/images/makeup.jpeg",
   },
   {
     number: 7,
     name: "Glasses",
     imageUrl:
-      "https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=600&q=80",
+      "/images/glasses.webp",
   },
   {
     number: 8,
     name: "Mehndi",
     imageUrl:
-      "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&q=80",
+      "/images/mehndi.jpg",
   },
   {
     number: 9,
     name: "Watches",
     imageUrl:
-      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80",
+      "/images/watches.jpg",
+  },
+  {
+    number: 10,
+    name: "Baby Bags",
+    imageUrl:
+      "/images/baby-bag.jpg",
   },
 ] as const;
 
