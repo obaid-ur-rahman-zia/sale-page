@@ -190,8 +190,17 @@ export default function Home() {
     setSaleItems((previous) => previous.filter((_, index) => index !== indexToRemove));
   }
 
-  const saleTotal = useMemo(
-    () => saleItems.reduce((sum, item) => sum + (item.amount - item.discount), 0),
+  const saleTotals = useMemo(
+    () =>
+      saleItems.reduce(
+        (totals, item) => {
+          totals.gross += item.amount;
+          totals.discount += item.discount;
+          totals.net += item.amount - item.discount;
+          return totals;
+        },
+        { gross: 0, discount: 0, net: 0 },
+      ),
     [saleItems],
   );
   const visibleItems = saleItems.slice(0, 4);
@@ -233,7 +242,6 @@ export default function Home() {
     <div class="meta">
       <div><strong>Sale ID:</strong> ${bill.saleId}</div>
       <div><strong>Date:</strong> ${new Date(bill.createdAt).toLocaleString()}</div>
-      <div><strong>Salesman:</strong> ${bill.salesman?.name ?? "N/A"}</div>
       <div><strong>Preferred Printer:</strong> ${preferredPrinter || "System Default"}</div>
     </div>
     <table>
@@ -374,30 +382,29 @@ export default function Home() {
       <div className="mx-auto grid h-full w-full max-w-7xl gap-3 lg:grid-cols-[340px_320px_1fr]">
         <section className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex h-full flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <h1 className="text-xl font-semibold text-slate-900">Sale Entry</h1>
-              <Link
-                href="/category-sales"
-                className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                title="Category Sales Page"
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
-                  <path d="M4 4h16v2H4V4zm2 5h3v11H6V9zm5 3h3v8h-3v-8zm5-5h3v13h-3V7z" />
-                </svg>
-                <span>{saleId}</span>
-              </Link>
-            </div>
-
+            
             <div className="space-y-3 rounded-xl border border-slate-200 p-3">
-            <div className="grid grid-cols-2 gap-2 items-center justify-between">
-              <input
-                value={selectedCategory?.name ?? ""}
-                readOnly
-                placeholder="Select a category from the right side"
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none"
-              />
+              <div className="grid grid-cols-2 gap-2 items-center justify-between">
+                <input
+                  value={selectedCategory?.name ?? ""}
+                  readOnly
+                  placeholder="Select a category from the right side"
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none"
+                />
 
-              <label className="block text-sm font-medium text-slate-700">
+                <label className="block text-sm font-medium text-slate-700">
+                  <input
+                    ref={amountInputRef}
+                    value={amountInput}
+                    onChange={(event) => setAmountInput(event.target.value)}
+                    onKeyDown={handleAmountKeyDown}
+                    placeholder="0.00"
+                    inputMode="none"
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </label>
+                {/* Salesman selector hidden on request */}
+                {/* <label className="block text-sm font-medium text-slate-700">
                 <select
                   value={selectedSalesmanId ?? ""}
                   onChange={(event) => setSelectedSalesmanId(Number(event.target.value))}
@@ -410,33 +417,11 @@ export default function Home() {
                     </option>
                   ))}
                 </select>
-              </label>
+              </label> */}
 
-            </div>
+              </div>
 
-              <label className="block text-sm font-medium text-slate-700">
-                <input
-                  ref={amountInputRef}
-                  value={amountInput}
-                  onChange={(event) => setAmountInput(event.target.value)}
-                  onKeyDown={handleAmountKeyDown}
-                  placeholder="0.00"
-                  inputMode="none"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                />
-              </label>
 
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                Discount
-                <input
-                  value={discountInput}
-                  onChange={(event) => setDiscountInput(event.target.value)}
-                  onKeyDown={handleAmountKeyDown}
-                  placeholder="0"
-                  inputMode="numeric"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                />
-              </label>
 
               <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
                 <label className="flex items-center gap-2 text-xs text-slate-700">
@@ -481,7 +466,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={addItem}
-                className="h-10 rounded-lg bg-blue-600 text-sm font-semibold text-white transition hover:bg-blue-700"
+                className="h-32 rounded-lg bg-blue-600 text-sm font-semibold text-white transition hover:bg-blue-700"
               >
                 Add
               </button>
@@ -489,7 +474,7 @@ export default function Home() {
                 type="button"
                 onClick={saveSale}
                 disabled={saving}
-                className="h-10 rounded-lg bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-32 rounded-lg bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? "Saving..." : "Save"}
               </button>
@@ -512,8 +497,8 @@ export default function Home() {
             {feedback ? (
               <div
                 className={`rounded-lg border px-3 py-2 text-sm ${feedback.type === "success"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-red-200 bg-red-50 text-red-700"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-red-200 bg-red-50 text-red-700"
                   }`}
               >
                 {feedback.text}
@@ -525,9 +510,37 @@ export default function Home() {
 
         <section className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between gap-3">
+              <Link
+                href="/category-sales"
+                className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                title="Category Sales Page"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
+                  <path d="M4 4h16v2H4V4zm2 5h3v11H6V9zm5 3h3v8h-3v-8zm5-5h3v13h-3V7z" />
+                </svg>
+                <span>{saleId}</span>
+              </Link>
+            </div>
+
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-900">Items in Sale ID</h2>
-              <p className="text-sm font-semibold text-slate-800">Total: {saleTotal.toFixed(2)}</p>
+              <div className="text-right text-xs text-slate-700">
+                {/* <p>Gross: {saleTotals.gross.toFixed(2)}</p>
+                <p>Discount: {saleTotals.discount.toFixed(2)}</p> */}
+                <p className="text-sm font-semibold text-slate-800">Total: {saleTotals.net.toFixed(2)}</p>
+                <label className="mt-1 inline-flex items-center justify-end gap-2 text-xs font-medium text-slate-700">
+                  <span>Discount Input:</span>
+                  <input
+                    value={discountInput}
+                    onChange={(event) => setDiscountInput(event.target.value)}
+                    onKeyDown={handleAmountKeyDown}
+                    placeholder="0"
+                    inputMode="numeric"
+                    className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500"
+                  />
+                </label>
+              </div>
             </div>
             <div className="flex-1 rounded-xl border border-slate-200 p-3">
               {saleItems.length === 0 ? (
@@ -577,8 +590,8 @@ export default function Home() {
                     type="button"
                     onClick={() => setSelectedCategoryId(category.id)}
                     className={`cursor-pointer rounded-xl border text-left transition ${isSelected
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-slate-200 bg-white hover:border-slate-300"
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-slate-200 bg-white hover:border-slate-300"
                       }`}
                   >
                     <div className="relative h-20 w-full overflow-hidden rounded-t-xl">
