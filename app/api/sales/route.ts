@@ -14,21 +14,39 @@ type CreateSalePayload = {
   }>;
 };
 
-function generateSaleId() {
-  const now = new Date();
-  const date = now
-    .toISOString()
-    .slice(0, 10)
-    .replaceAll("-", "");
-  const stamp = now.getTime().toString().slice(-6);
+function parseSaleNumber(saleId: string) {
+  const match = /^sale-(\d+)$/i.exec(saleId.trim());
+  if (!match) {
+    return null;
+  }
 
-  return `SAL-${date}-${stamp}`;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function generateSaleId() {
+  const recentSales = await prisma.sale.findMany({
+    orderBy: { createdAt: "desc" },
+    select: { saleId: true },
+    take: 500,
+  });
+
+  let maxNumber = 0;
+  for (const sale of recentSales) {
+    const number = parseSaleNumber(sale.saleId);
+    if (number && number > maxNumber) {
+      maxNumber = number;
+    }
+  }
+
+  return `sale-${maxNumber + 1}`;
 }
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as CreateSalePayload;
-    const saleId = body.saleId?.trim() || generateSaleId();
+    const providedSaleId = body.saleId?.trim();
+    const saleId = providedSaleId && providedSaleId.length > 0 ? providedSaleId : await generateSaleId();
     const salesmanId = Number(body.salesmanId);
     const items =
       body.items?.map((item) => ({

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 type Category = {
   id: number;
@@ -43,22 +43,29 @@ type BillResponse = {
   };
 };
 
-function generateSaleId() {
-  const now = new Date();
-  const datePart = now
-    .toISOString()
-    .slice(0, 10)
-    .replaceAll("-", "");
-  const randomPart = Math.floor(Math.random() * 9000 + 1000);
-
-  return `SAL-${datePart}-${randomPart}`;
-}
-
 const keypadItems = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "DEL"] as const;
+const saleIdPattern = /^sale-(\d+)$/i;
+
+function getNextSaleId(currentSaleId: string | null) {
+  if (!currentSaleId) {
+    return "sale-1";
+  }
+
+  const match = saleIdPattern.exec(currentSaleId.trim());
+  if (!match) {
+    return "sale-1";
+  }
+
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value < 0) {
+    return "sale-1";
+  }
+
+  return `sale-${value + 1}`;
+}
 
 export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [salesmen, setSalesmen] = useState<Salesman[]>([]);
   const [selectedSalesmanId, setSelectedSalesmanId] = useState<number | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [amountInput, setAmountInput] = useState("");
@@ -70,6 +77,7 @@ export default function Home() {
   const [autoPrintAfterSave, setAutoPrintAfterSave] = useState(false);
   const [preferredPrinter, setPreferredPrinter] = useState("");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [activeKeypadInput, setActiveKeypadInput] = useState<"amount" | "discount">("amount");
   const amountInputRef = useRef<HTMLInputElement>(null);
 
   const selectedCategory = useMemo(
@@ -77,8 +85,27 @@ export default function Home() {
     [categories, selectedCategoryId],
   );
 
+  const fetchLatestSaleId = useCallback(async () => {
+    try {
+      const response = await fetch("/api/sales/bill?previous=1", { cache: "no-store" });
+      if (!response.ok) {
+        return null;
+      }
+      const bill = (await response.json()) as BillResponse;
+      return bill.saleId || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const initializeSaleId = useCallback(async () => {
+    const latestSaleId = await fetchLatestSaleId();
+    setLastSavedSaleId(latestSaleId);
+    setSaleId(getNextSaleId(latestSaleId));
+  }, [fetchLatestSaleId]);
+
   useEffect(() => {
-    setSaleId(generateSaleId());
+    void initializeSaleId();
     void fetchCategories();
     void fetchSalesmen();
     const savedPrinter = window.localStorage.getItem("preferredPrinter");
@@ -89,7 +116,7 @@ export default function Home() {
     if (autoPrintSaved === "1") {
       setAutoPrintAfterSave(true);
     }
-  }, []);
+  }, [initializeSaleId]);
 
   useEffect(() => {
     if (selectedCategoryId) {
@@ -111,7 +138,6 @@ export default function Home() {
     try {
       const response = await fetch("/api/salesmen", { cache: "no-store" });
       const data = (await response.json()) as { salesmen: Salesman[] };
-      setSalesmen(data.salesmen ?? []);
       if ((data.salesmen ?? []).length > 0) {
         setSelectedSalesmanId(data.salesmen[0].id);
       }
@@ -122,7 +148,8 @@ export default function Home() {
 
   function handleKeypadTap(key: (typeof keypadItems)[number]) {
     setFeedback(null);
-    setAmountInput((previous) => {
+    const setTargetInput = activeKeypadInput === "discount" ? setDiscountInput : setAmountInput;
+    setTargetInput((previous) => {
       if (key === "DEL") {
         return previous.slice(0, -1);
       }
@@ -282,15 +309,22 @@ export default function Home() {
 
   async function printPreviousBill() {
     try {
-      const query = lastSavedSaleId
-        ? `saleId=${encodeURIComponent(lastSavedSaleId)}`
-        : "previous=1";
-      const response = await fetch(`/api/sales/bill?${query}`, { cache: "no-store" });
+      const defaultSaleId = lastSavedSaleId ?? (await fetchLatestSaleId()) ?? "sale-1";
+      const enteredSaleId = window.prompt("Enter sale ID", defaultSaleId)?.trim();
+
+      if (!enteredSaleId) {
+        return;
+      }
+
+      const response = await fetch(`/api/sales/bill?saleId=${encodeURIComponent(enteredSaleId)}`, {
+        cache: "no-store",
+      });
       if (!response.ok) {
         const errorData = (await response.json()) as { message?: string };
         throw new Error(errorData.message ?? "Unable to load previous bill.");
       }
       const bill = (await response.json()) as BillResponse;
+      setLastSavedSaleId(bill.saleId);
       printInvoice(bill);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to print previous bill.";
@@ -337,7 +371,7 @@ export default function Home() {
         type: "success",
         text: "Sale saved successfully. Note: Browsers show a print dialog; silent print requires kiosk/native setup.",
       });
-      setSaleId(generateSaleId());
+      setSaleId(getNextSaleId(currentSaleId));
       setAmountInput("");
       setDiscountInput("");
       setSelectedCategoryId(null);
@@ -397,6 +431,8 @@ export default function Home() {
                     ref={amountInputRef}
                     value={amountInput}
                     onChange={(event) => setAmountInput(event.target.value)}
+                    onFocus={() => setActiveKeypadInput("amount")}
+                    onClick={() => setActiveKeypadInput("amount")}
                     onKeyDown={handleAmountKeyDown}
                     placeholder="0.00"
                     inputMode="none"
@@ -534,9 +570,12 @@ export default function Home() {
                   <input
                     value={discountInput}
                     onChange={(event) => setDiscountInput(event.target.value)}
+                    onFocus={() => setActiveKeypadInput("discount")}
+                    onClick={() => setActiveKeypadInput("discount")}
                     onKeyDown={handleAmountKeyDown}
                     placeholder="0"
-                    inputMode="numeric"
+                    inputMode="none"
+                    readOnly
                     className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500"
                   />
                 </label>
