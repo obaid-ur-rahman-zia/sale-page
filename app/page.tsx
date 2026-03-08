@@ -79,6 +79,9 @@ export default function Home() {
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeKeypadInput, setActiveKeypadInput] = useState<"amount" | "discount">("amount");
   const amountInputRef = useRef<HTMLInputElement>(null);
+  const activeKeypadInputRef = useRef<"amount" | "discount">("amount");
+  const amountValueRef = useRef("");
+  const discountValueRef = useRef("");
 
   const selectedCategory = useMemo(
     () => categories.find((category) => category.id === selectedCategoryId) ?? null,
@@ -119,10 +122,10 @@ export default function Home() {
   }, [initializeSaleId]);
 
   useEffect(() => {
-    if (selectedCategoryId) {
+    if (selectedCategoryId && activeKeypadInput === "amount") {
       amountInputRef.current?.focus();
     }
-  }, [selectedCategoryId]);
+  }, [activeKeypadInput, selectedCategoryId]);
 
   async function fetchCategories() {
     try {
@@ -146,33 +149,56 @@ export default function Home() {
     }
   }
 
+  function setKeypadTarget(target: "amount" | "discount") {
+    activeKeypadInputRef.current = target;
+    setActiveKeypadInput(target);
+  }
+
+  function updateAmountValue(next: string) {
+    amountValueRef.current = next;
+    setAmountInput(next);
+  }
+
+  function updateDiscountValue(next: string) {
+    discountValueRef.current = next;
+    setDiscountInput(next);
+  }
+
   function handleKeypadTap(key: (typeof keypadItems)[number]) {
     setFeedback(null);
-    const setTargetInput = activeKeypadInput === "discount" ? setDiscountInput : setAmountInput;
+    const isDiscountTarget = activeKeypadInputRef.current === "discount";
+    const setTargetInput = isDiscountTarget ? setDiscountInput : setAmountInput;
     setTargetInput((previous) => {
+      let next = previous;
       if (key === "DEL") {
-        return previous.slice(0, -1);
-      }
-
-      if (key === "00") {
+        next = previous.slice(0, -1);
+      } else if (key === "00") {
         if (previous === "" || previous === "0") {
-          return "0";
+          next = "0";
+        } else {
+          next = `${previous}00`;
         }
-        return `${previous}00`;
+      } else if (previous === "0") {
+        next = key;
+      } else {
+        next = `${previous}${key}`;
       }
 
-      if (previous === "0") {
-        return key;
+      if (isDiscountTarget) {
+        discountValueRef.current = next;
+      } else {
+        amountValueRef.current = next;
       }
-      return `${previous}${key}`;
+      return next;
     });
   }
 
   function clearForm() {
-    setAmountInput("");
-    setDiscountInput("");
+    updateAmountValue("");
+    updateDiscountValue("");
     setSelectedCategoryId(null);
     setSaleItems([]);
+    setKeypadTarget("amount");
     setFeedback(null);
   }
 
@@ -182,12 +208,13 @@ export default function Home() {
       return;
     }
 
-    const parsedAmount = Number(amountInput);
+    const parsedAmount = Number(amountValueRef.current);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       setFeedback({ type: "error", text: "Please enter a valid amount." });
       return;
     }
-    const parsedDiscount = discountInput.trim() === "" ? 0 : Number(discountInput);
+    const parsedDiscount =
+      discountValueRef.current.trim() === "" ? 0 : Number(discountValueRef.current);
     if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0 || parsedDiscount > parsedAmount) {
       setFeedback({ type: "error", text: "Discount must be between 0 and amount." });
       return;
@@ -207,9 +234,10 @@ export default function Home() {
         discount: parsedDiscount,
       },
     ]);
-    setAmountInput("");
-    setDiscountInput("");
+    updateAmountValue("");
+    updateDiscountValue("");
     setSelectedCategoryId(null);
+    setKeypadTarget("amount");
     setFeedback({ type: "success", text: "Item added to the sale list." });
   }
 
@@ -372,8 +400,8 @@ export default function Home() {
         text: "Sale saved successfully. Note: Browsers show a print dialog; silent print requires kiosk/native setup.",
       });
       setSaleId(getNextSaleId(currentSaleId));
-      setAmountInput("");
-      setDiscountInput("");
+      updateAmountValue("");
+      updateDiscountValue("");
       setSelectedCategoryId(null);
       setSaleItems([]);
 
@@ -430,9 +458,10 @@ export default function Home() {
                   <input
                     ref={amountInputRef}
                     value={amountInput}
-                    onChange={(event) => setAmountInput(event.target.value)}
-                    onFocus={() => setActiveKeypadInput("amount")}
-                    onClick={() => setActiveKeypadInput("amount")}
+                    onChange={(event) => updateAmountValue(event.target.value)}
+                    onPointerDown={() => setKeypadTarget("amount")}
+                    onFocus={() => setKeypadTarget("amount")}
+                    onClick={() => setKeypadTarget("amount")}
                     onKeyDown={handleAmountKeyDown}
                     placeholder="0.00"
                     inputMode="none"
@@ -569,9 +598,10 @@ export default function Home() {
                   <span>Discount Input:</span>
                   <input
                     value={discountInput}
-                    onChange={(event) => setDiscountInput(event.target.value)}
-                    onFocus={() => setActiveKeypadInput("discount")}
-                    onClick={() => setActiveKeypadInput("discount")}
+                    onChange={(event) => updateDiscountValue(event.target.value)}
+                    onPointerDown={() => setKeypadTarget("discount")}
+                    onFocus={() => setKeypadTarget("discount")}
+                    onClick={() => setKeypadTarget("discount")}
                     onKeyDown={handleAmountKeyDown}
                     placeholder="0"
                     inputMode="none"
@@ -579,6 +609,9 @@ export default function Home() {
                     className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500"
                   />
                 </label>
+                <p className="text-[11px] text-slate-500">
+                  Keypad target: {activeKeypadInput === "discount" ? "Discount" : "Amount"}
+                </p>
               </div>
             </div>
             <div className="flex-1 rounded-xl border border-slate-200 p-3">
