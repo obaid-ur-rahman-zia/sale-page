@@ -12,57 +12,57 @@ const prisma = new PrismaClient({ adapter });
 const categories = [
   {
     number: 1,
-    name: "Electronics",
+    name: "Jewelry",
     imageUrl:
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=600&q=80",
   },
   {
     number: 2,
-    name: "Fashion",
+    name: "Jhumki",
     imageUrl:
-      "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1611085583191-a3b181a88401?auto=format&fit=crop&w=600&q=80",
   },
   {
     number: 3,
-    name: "Grocery",
+    name: "Bangles",
     imageUrl:
-      "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1617038220319-276d3cfab638?auto=format&fit=crop&w=600&q=80",
   },
   {
     number: 4,
-    name: "Books",
+    name: "Bangle Set",
     imageUrl:
-      "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80",
   },
   {
     number: 5,
-    name: "Home Decor",
+    name: "Accessories",
     imageUrl:
-      "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&q=80",
   },
   {
     number: 6,
-    name: "Sports",
-    imageUrl:
-      "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=600&q=80",
-  },
-  {
-    number: 7,
-    name: "Beauty",
+    name: "Makeup",
     imageUrl:
       "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=600&q=80",
   },
   {
-    number: 8,
-    name: "Kids",
+    number: 7,
+    name: "Glasses",
     imageUrl:
-      "https://images.unsplash.com/photo-1515488764276-beab7607c1e6?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    number: 8,
+    name: "Mehndi",
+    imageUrl:
+      "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&q=80",
   },
   {
     number: 9,
-    name: "Accessories",
+    name: "Watches",
     imageUrl:
-      "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80",
   },
 ] as const;
 
