@@ -54,7 +54,24 @@ export async function GET(request: Request) {
     }
 
     const grossAmount = sales.reduce((sum, item) => sum + item.amount, 0);
-    const totalDiscount = sales.reduce((sum, item) => sum + item.discount, 0);
+    const legacyItemDiscount = sales.reduce((sum, item) => sum + item.discount, 0);
+    const prismaWithSaleBill = prisma as typeof prisma & {
+      saleBill?: {
+        findUnique: (args: {
+          where: { saleId: string };
+          select: { totalDiscount: true };
+        }) => Promise<{ totalDiscount: number } | null>;
+      };
+    };
+
+    let totalDiscount = legacyItemDiscount;
+    if (prismaWithSaleBill.saleBill?.findUnique) {
+      const billDiscount = await prismaWithSaleBill.saleBill.findUnique({
+        where: { saleId: resolvedSaleId },
+        select: { totalDiscount: true },
+      });
+      totalDiscount = billDiscount?.totalDiscount ?? legacyItemDiscount;
+    }
     const netAmount = grossAmount - totalDiscount;
 
     return NextResponse.json({

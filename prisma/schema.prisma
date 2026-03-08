@@ -44,3 +44,13 @@ model Sale {
   @@index([categoryId, createdAt])
   @@index([createdAt])
 }
+
+model SaleBill {
+  id            Int      @id @default(autoincrement())
+  saleId        String   @unique
+  totalDiscount Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([createdAt])
+}

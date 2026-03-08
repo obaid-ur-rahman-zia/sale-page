@@ -41,7 +41,16 @@ export async function GET(request: Request) {
     const createdAt = buildDateRange(searchParams);
     const where = createdAt ? { createdAt } : undefined;
 
-    const [categories, groupedSales, totals] = await Promise.all([
+    const prismaWithSaleBill = prisma as typeof prisma & {
+      saleBill?: {
+        aggregate: (args: {
+          where?: { createdAt?: { gte?: Date; lte?: Date } };
+          _sum: { totalDiscount: true };
+        }) => Promise<{ _sum: { totalDiscount: number | null } }>;
+      };
+    };
+
+    const [categories, groupedSales, totals, saleLevelDiscountTotals] = await Promise.all([
       prisma.category.findMany({
         orderBy: { number: "asc" },
         select: { id: true, number: true, name: true },
@@ -57,6 +66,12 @@ export async function GET(request: Request) {
         _sum: { amount: true, discount: true },
         _count: { _all: true },
       }),
+      prismaWithSaleBill.saleBill?.aggregate
+        ? prismaWithSaleBill.saleBill.aggregate({
+            where: createdAt ? { createdAt } : undefined,
+            _sum: { totalDiscount: true },
+          })
+        : Promise.resolve({ _sum: { totalDiscount: 0 } }),
     ]);
 
     const groupedMap = new Map(
@@ -87,8 +102,10 @@ export async function GET(request: Request) {
     return NextResponse.json({
       overall: {
         grossAmount: totals._sum.amount ?? 0,
-        totalDiscount: totals._sum.discount ?? 0,
-        totalAmount: (totals._sum.amount ?? 0) - (totals._sum.discount ?? 0),
+        totalDiscount: (totals._sum.discount ?? 0) + (saleLevelDiscountTotals._sum.totalDiscount ?? 0),
+        totalAmount:
+          (totals._sum.amount ?? 0) -
+          ((totals._sum.discount ?? 0) + (saleLevelDiscountTotals._sum.totalDiscount ?? 0)),
         totalSales: totals._count._all,
       },
       byCategory,

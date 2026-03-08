@@ -70,6 +70,7 @@ export default function Home() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [amountInput, setAmountInput] = useState("");
   const [discountInput, setDiscountInput] = useState("");
+  const [appliedBillDiscount, setAppliedBillDiscount] = useState(0);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [saleId, setSaleId] = useState("");
   const [lastSavedSaleId, setLastSavedSaleId] = useState<string | null>(null);
@@ -164,6 +165,20 @@ export default function Home() {
     setDiscountInput(next);
   }
 
+  function applyBillDiscount() {
+    const parsedDiscount =
+      discountValueRef.current.trim() === "" ? 0 : Number(discountValueRef.current);
+    const grossAmount = saleItems.reduce((sum, item) => sum + item.amount, 0);
+
+    if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0 || parsedDiscount > grossAmount) {
+      setFeedback({ type: "error", text: "Bill discount must be between 0 and gross amount." });
+      return;
+    }
+
+    setAppliedBillDiscount(parsedDiscount);
+    setFeedback({ type: "success", text: "Bill discount applied." });
+  }
+
   function handleKeypadTap(key: (typeof keypadItems)[number]) {
     setFeedback(null);
     const isDiscountTarget = activeKeypadInputRef.current === "discount";
@@ -196,6 +211,7 @@ export default function Home() {
   function clearForm() {
     updateAmountValue("");
     updateDiscountValue("");
+    setAppliedBillDiscount(0);
     setSelectedCategoryId(null);
     setSaleItems([]);
     setKeypadTarget("amount");
@@ -213,12 +229,6 @@ export default function Home() {
       setFeedback({ type: "error", text: "Please enter a valid amount." });
       return;
     }
-    const parsedDiscount =
-      discountValueRef.current.trim() === "" ? 0 : Number(discountValueRef.current);
-    if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0 || parsedDiscount > parsedAmount) {
-      setFeedback({ type: "error", text: "Discount must be between 0 and amount." });
-      return;
-    }
 
     if (!selectedCategory) {
       setFeedback({ type: "error", text: "Selected category is invalid." });
@@ -231,7 +241,7 @@ export default function Home() {
         categoryId: selectedCategory.id,
         categoryName: selectedCategory.name,
         amount: parsedAmount,
-        discount: parsedDiscount,
+        discount: 0,
       },
     ]);
     updateAmountValue("");
@@ -246,17 +256,16 @@ export default function Home() {
   }
 
   const saleTotals = useMemo(
-    () =>
-      saleItems.reduce(
-        (totals, item) => {
-          totals.gross += item.amount;
-          totals.discount += item.discount;
-          totals.net += item.amount - item.discount;
-          return totals;
-        },
-        { gross: 0, discount: 0, net: 0 },
-      ),
-    [saleItems],
+    () => {
+      const gross = saleItems.reduce((sum, item) => sum + item.amount, 0);
+      const discount = Math.min(appliedBillDiscount, gross);
+      return {
+        gross,
+        discount,
+        net: gross - discount,
+      };
+    },
+    [appliedBillDiscount, saleItems],
   );
   const visibleItems = saleItems.slice(0, 4);
   const hiddenItemsCount = Math.max(0, saleItems.length - visibleItems.length);
@@ -381,10 +390,10 @@ export default function Home() {
         body: JSON.stringify({
           saleId: currentSaleId,
           salesmanId: selectedSalesmanId,
+          billDiscount: saleTotals.discount,
           items: saleItems.map((item) => ({
             categoryId: item.categoryId,
             amount: item.amount,
-            discount: item.discount,
           })),
         }),
       });
@@ -402,6 +411,7 @@ export default function Home() {
       setSaleId(getNextSaleId(currentSaleId));
       updateAmountValue("");
       updateDiscountValue("");
+      setAppliedBillDiscount(0);
       setSelectedCategoryId(null);
       setSaleItems([]);
 
@@ -594,6 +604,8 @@ export default function Home() {
                 {/* <p>Gross: {saleTotals.gross.toFixed(2)}</p>
                 <p>Discount: {saleTotals.discount.toFixed(2)}</p> */}
                 <p className="text-sm font-semibold text-slate-800">Total: {saleTotals.net.toFixed(2)}</p>
+                <p>Gross: {saleTotals.gross.toFixed(2)}</p>
+                <p>Discount: {saleTotals.discount.toFixed(2)}</p>
                 <label className="mt-1 inline-flex items-center justify-end gap-2 text-xs font-medium text-slate-700">
                   <span>Discount Input:</span>
                   <input
@@ -609,6 +621,13 @@ export default function Home() {
                     className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500"
                   />
                 </label>
+                <button
+                  type="button"
+                  onClick={applyBillDiscount}
+                  className="mt-1 rounded bg-slate-800 px-2 py-1 text-[11px] font-semibold text-white hover:bg-slate-900"
+                >
+                  Add Discount
+                </button>
                 <p className="text-[11px] text-slate-500">
                   Keypad target: {activeKeypadInput === "discount" ? "Discount" : "Amount"}
                 </p>
@@ -626,10 +645,7 @@ export default function Home() {
                     >
                       <div>
                         <p className="text-sm font-medium text-slate-800">{item.categoryName}</p>
-                        <p className="text-xs text-slate-500">
-                          {item.amount.toFixed(2)} - {item.discount.toFixed(2)} ={" "}
-                          {(item.amount - item.discount).toFixed(2)}
-                        </p>
+                        <p className="text-xs text-slate-500">{item.amount.toFixed(2)}</p>
                       </div>
                       <button
                         type="button"

@@ -5,12 +5,12 @@ import { prisma } from "@/lib/prisma";
 type CreateSalePayload = {
   saleId?: string;
   salesmanId?: number;
+  billDiscount?: number;
   categoryId?: number;
   amount?: number;
   items?: Array<{
     categoryId?: number;
     amount?: number;
-    discount?: number;
   }>;
 };
 
@@ -48,11 +48,12 @@ export async function POST(request: Request) {
     const providedSaleId = body.saleId?.trim();
     const saleId = providedSaleId && providedSaleId.length > 0 ? providedSaleId : await generateSaleId();
     const salesmanId = Number(body.salesmanId);
+    const billDiscount = Number(body.billDiscount ?? 0);
     const items =
       body.items?.map((item) => ({
         categoryId: Number(item.categoryId),
         amount: Number(item.amount),
-        discount: Number(item.discount ?? 0),
+        discount: 0,
       })) ?? [];
 
     if (items.length === 0) {
@@ -69,20 +70,19 @@ export async function POST(request: Request) {
 
     const hasInvalidItem = items.some(
       (item) =>
-        !Number.isFinite(item.categoryId) ||
-        item.categoryId <= 0 ||
-        !Number.isFinite(item.amount) ||
-        item.amount <= 0 ||
-        !Number.isFinite(item.discount) ||
-        item.discount < 0 ||
-        item.discount > item.amount,
+        !Number.isFinite(item.categoryId) || item.categoryId <= 0 || !Number.isFinite(item.amount) || item.amount <= 0,
     );
 
     if (hasInvalidItem) {
       return NextResponse.json(
-        { message: "All items must have valid categoryId, amount, and discount" },
+        { message: "All items must have valid categoryId and amount" },
         { status: 400 },
       );
+    }
+
+    const grossAmount = items.reduce((sum, item) => sum + item.amount, 0);
+    if (!Number.isFinite(billDiscount) || billDiscount < 0 || billDiscount > grossAmount) {
+      return NextResponse.json({ message: "Bill discount must be between 0 and gross amount" }, { status: 400 });
     }
 
     if (!Number.isFinite(salesmanId) || salesmanId <= 0) {
@@ -113,28 +113,50 @@ export async function POST(request: Request) {
       );
     }
 
-    const createdSales = await prisma.$transaction(
-      items.map((item) =>
-        prisma.sale.create({
-          data: {
-            saleId,
-            categoryId: item.categoryId,
-            amount: item.amount,
-            discount: item.discount,
-            salesmanId,
-          },
-          select: {
-            id: true,
-            saleId: true,
-            amount: true,
-            discount: true,
-            categoryId: true,
-            salesmanId: true,
-            createdAt: true,
-          },
-        }),
-      ),
-    );
+    const createdSales = await prisma.$transaction(async (tx) => {
+      const txWithSaleBill = tx as typeof tx & {
+        saleBill?: {
+          upsert: (args: {
+            where: { saleId: string };
+            update: { totalDiscount: number };
+            create: { saleId: string; totalDiscount: number };
+          }) => Promise<unknown>;
+        };
+      };
+      const hasSaleBillModel = Boolean(txWithSaleBill.saleBill?.upsert);
+
+      if (hasSaleBillModel) {
+        await txWithSaleBill.saleBill!.upsert({
+          where: { saleId },
+          update: { totalDiscount: billDiscount },
+          create: { saleId, totalDiscount: billDiscount },
+        });
+      }
+
+      return Promise.all(
+        items.map((item, index) =>
+          tx.sale.create({
+            data: {
+              saleId,
+              categoryId: item.categoryId,
+              amount: item.amount,
+              // Fallback for stale dev client: keep bill discount on first row.
+              discount: hasSaleBillModel ? 0 : index === 0 ? billDiscount : 0,
+              salesmanId,
+            },
+            select: {
+              id: true,
+              saleId: true,
+              amount: true,
+              discount: true,
+              categoryId: true,
+              salesmanId: true,
+              createdAt: true,
+            },
+          }),
+        ),
+      );
+    });
 
     return NextResponse.json(
       {
