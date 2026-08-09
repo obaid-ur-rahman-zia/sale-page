@@ -6,19 +6,29 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// Prisma reads DATABASE_URL itself (see the datasource block in schema.prisma);
-// this call is here so a missing or non-MongoDB URL fails with a clear message
-// instead of a generic connector error on the first query.
-if (!globalForPrisma.prisma) {
+function createPrismaClient(): PrismaClient {
+  // Validated here rather than at module scope so `next build` can collect page
+  // data without a database URL — the Docker image is built before DATABASE_URL
+  // is injected by the deployment.
   getDatabaseUrl();
-}
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+  return new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
 }
+
+function getPrismaClient(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createPrismaClient();
+  }
+  return globalForPrisma.prisma;
+}
+
+// The client is created on first use, not on import, for the same reason.
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, property) {
+    const client = getPrismaClient();
+    const value = Reflect.get(client, property, client);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
