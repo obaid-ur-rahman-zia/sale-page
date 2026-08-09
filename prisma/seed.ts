@@ -1,10 +1,19 @@
 import { PrismaClient } from "@prisma/client";
 import "dotenv/config";
 
-import { getDatabaseUrl } from "../lib/database-url";
+// Deliberately self-contained — the runtime Docker image ships prisma/ but not
+// lib/, so importing app code here would break `prisma db seed` in the container.
+function assertDatabaseUrl() {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) {
+    throw new Error("DATABASE_URL is not set. Point it at a MongoDB replica set.");
+  }
+  if (!url.startsWith("mongodb://") && !url.startsWith("mongodb+srv://")) {
+    throw new Error(`DATABASE_URL ("${url}") is not a MongoDB connection string.`);
+  }
+}
 
-// Fails fast with a readable message; Prisma itself reads DATABASE_URL from the env.
-getDatabaseUrl();
+assertDatabaseUrl();
 
 const prisma = new PrismaClient();
 
