@@ -5,19 +5,19 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 type Category = {
-  id: number;
+  id: string;
   number: number;
   name: string;
   imageUrl: string;
 };
 
 type Salesman = {
-  id: number;
+  id: string;
   name: string;
 };
 
 type SaleItem = {
-  categoryId: number;
+  categoryId: string;
   categoryName: string;
   amount: number;
   discount: number;
@@ -25,11 +25,11 @@ type SaleItem = {
 
 type BillResponse = {
   saleId: string;
-  salesman: { id: number; name: string } | null;
+  salesman: { id: string; name: string } | null;
   createdAt: string;
   items: Array<{
-    id: number;
-    categoryId: number;
+    id: string;
+    categoryId: string;
     categoryNumber: number;
     categoryName: string;
     amount: number;
@@ -66,8 +66,8 @@ function getNextSaleId(currentSaleId: string | null) {
 
 export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedSalesmanId, setSelectedSalesmanId] = useState<number | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [selectedSalesmanId, setSelectedSalesmanId] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [amountInput, setAmountInput] = useState("");
   const [discountInput, setDiscountInput] = useState("");
   const [appliedBillDiscount, setAppliedBillDiscount] = useState(0);
@@ -595,6 +595,13 @@ export default function Home() {
                   <path d="M4 4h16v2H4V4zm2 5h3v11H6V9zm5 3h3v8h-3v-8zm5-5h3v13h-3V7z" />
                 </svg>
                 <span>{saleId}</span>
+              </Link>
+              <Link
+                href="/admin/categories"
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                title="Add or edit categories"
+              >
+                Admin
               </Link>
             </div>
 

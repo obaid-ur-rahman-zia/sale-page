@@ -1,27 +1,35 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
+// Pinned to Prisma 6: Prisma 7 requires a driver adapter for every datasource and
+// no MongoDB adapter exists, so v7 cannot connect to MongoDB at runtime.
 generator client {
   provider = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl"]
+  // MongoDB runs through the Prisma query engine, so the Linux target used by the
+  // Dockerfile (node:20-bookworm-slim) has to be generated as well.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 model Category {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   number    Int      @unique
   name      String
   imageUrl  String
+  isActive  Boolean  @default(true)
   sales     Sale[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([isActive, number])
 }
 
 model Salesman {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   name      String   @unique
   sales     Sale[]
   createdAt DateTime @default(now())
@@ -29,13 +37,13 @@ model Salesman {
 }
 
 model Sale {
-  id         Int       @id @default(autoincrement())
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
   saleId     String
   amount     Float
   discount   Float     @default(0)
-  categoryId Int
+  categoryId String    @db.ObjectId
   category   Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  salesmanId Int?
+  salesmanId String?   @db.ObjectId
   salesman   Salesman? @relation(fields: [salesmanId], references: [id], onDelete: SetNull)
   createdAt  DateTime  @default(now())
 
@@ -46,7 +54,7 @@ model Sale {
 }
 
 model SaleBill {
-  id            Int      @id @default(autoincrement())
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
   saleId        String   @unique
   totalDiscount Float    @default(0)
   createdAt     DateTime @default(now())

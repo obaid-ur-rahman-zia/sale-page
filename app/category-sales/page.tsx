@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { APP_TIME_ZONE, addDaysToIsoDate, isoDateInZone } from "@/lib/time-zone";
 
 type CategorySummary = {
-  categoryId: number;
+  categoryId: string;
   number: number;
   name: string;
+  isActive: boolean;
   grossAmount: number;
   totalDiscount: number;
   totalAmount: number;
@@ -19,6 +22,7 @@ type SalesSummaryResponse = {
     totalDiscount: number;
     totalAmount: number;
     totalSales: number;
+    totalBills: number;
   };
   byCategory: CategorySummary[];
 };
@@ -50,54 +54,169 @@ type BillResponse = {
   };
 };
 
+type FilterOption = { id: string; name: string };
+
+const emptySummary: SalesSummaryResponse = {
+  overall: { grossAmount: 0, totalDiscount: 0, totalAmount: 0, totalSales: 0, totalBills: 0 },
+  byCategory: [],
+};
+
+function startOfMonth(isoDate: string) {
+  return `${isoDate.slice(0, 7)}-01`;
+}
+
 export default function CategorySalesPage() {
-  const [summary, setSummary] = useState<SalesSummaryResponse>({
-    overall: { grossAmount: 0, totalDiscount: 0, totalAmount: 0, totalSales: 0 },
-    byCategory: [],
-  });
+  const [summary, setSummary] = useState<SalesSummaryResponse>(emptySummary);
+  const [saleHistory, setSaleHistory] = useState<SaleHistoryItem[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<FilterOption[]>([]);
+  const [salesmanOptions, setSalesmanOptions] = useState<FilterOption[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saleHistory, setSaleHistory] = useState<SaleHistoryItem[]>([]);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
   const [activeTab, setActiveTab] = useState<"category" | "sales">("category");
   const [printingSaleId, setPrintingSaleId] = useState<string | null>(null);
 
-  const loadSummary = useCallback(async () => {
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [salesmanId, setSalesmanId] = useState("");
+  const [saleIdInput, setSaleIdInput] = useState("");
+  const [saleIdQuery, setSaleIdQuery] = useState("");
+
+  // Keeps a slow response from a previous filter state from overwriting a newer one.
+  const requestRef = useRef<AbortController | null>(null);
+
+  const today = useMemo(() => isoDateInZone(new Date()), []);
+
+  // The sale ID box filters as you type, but only after typing settles.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSaleIdQuery(saleIdInput.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [saleIdInput]);
+
+  const queryString = useMemo(() => {
+    const query = new URLSearchParams();
+    if (fromDate) query.set("from", fromDate);
+    if (toDate) query.set("to", toDate);
+    if (categoryId) query.set("categoryId", categoryId);
+    if (salesmanId) query.set("salesmanId", salesmanId);
+    if (saleIdQuery) query.set("saleId", saleIdQuery);
+    return query.toString();
+  }, [categoryId, fromDate, salesmanId, saleIdQuery, toDate]);
+
+  const hasActiveFilters = queryString.length > 0;
+  const datesAreReversed = Boolean(fromDate && toDate && fromDate > toDate);
+
+  useEffect(() => {
+    async function loadOptions() {
+      try {
+        const [categoriesResponse, salesmenResponse] = await Promise.all([
+          fetch("/api/categories?includeInactive=1", { cache: "no-store" }),
+          fetch("/api/salesmen", { cache: "no-store" }),
+        ]);
+
+        if (categoriesResponse.ok) {
+          const data = (await categoriesResponse.json()) as {
+            categories: Array<{ id: string; number: number; name: string }>;
+          };
+          setCategoryOptions(
+            (data.categories ?? []).map((category) => ({
+              id: category.id,
+              name: `#${category.number} ${category.name}`,
+            })),
+          );
+        }
+
+        if (salesmenResponse.ok) {
+          const data = (await salesmenResponse.json()) as { salesmen: FilterOption[] };
+          setSalesmanOptions(data.salesmen ?? []);
+        }
+      } catch {
+        // Filter dropdowns are optional; the report itself still works without them.
+      }
+    }
+
+    void loadOptions();
+  }, []);
+
+  const loadReport = useCallback(async () => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+
     try {
       setLoading(true);
       setError(null);
-      const query = new URLSearchParams();
-      if (fromDate) {
-        query.set("from", fromDate);
-      }
-      if (toDate) {
-        query.set("to", toDate);
-      }
-      const response = await fetch(`/api/sales/summary?${query.toString()}`, { cache: "no-store" });
-      if (!response.ok) {
+
+      const [summaryResponse, historyResponse] = await Promise.all([
+        fetch(`/api/sales/summary?${queryString}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        }),
+        fetch(`/api/sales/history?${queryString}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        }),
+      ]);
+
+      if (!summaryResponse.ok) {
         throw new Error("Unable to load sales summary.");
       }
-      const data = (await response.json()) as SalesSummaryResponse;
-      setSummary(data);
-
-      const historyResponse = await fetch(`/api/sales/history?${query.toString()}`, { cache: "no-store" });
       if (!historyResponse.ok) {
         throw new Error("Unable to load sale history.");
       }
+
+      const summaryData = (await summaryResponse.json()) as SalesSummaryResponse;
       const historyData = (await historyResponse.json()) as { sales: SaleHistoryItem[] };
+
+      setSummary(summaryData);
       setSaleHistory(historyData.sales ?? []);
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "Unexpected error";
-      setError(message);
+      if (loadError instanceof DOMException && loadError.name === "AbortError") {
+        return;
+      }
+      setError(loadError instanceof Error ? loadError.message : "Unexpected error");
     } finally {
-      setLoading(false);
+      if (requestRef.current === controller) {
+        setLoading(false);
+        requestRef.current = null;
+      }
     }
-  }, [fromDate, toDate]);
+  }, [queryString]);
 
   useEffect(() => {
-    void loadSummary();
-  }, [loadSummary]);
+    void loadReport();
+  }, [loadReport]);
+
+  function applyPreset(preset: "today" | "yesterday" | "last7" | "month") {
+    if (preset === "today") {
+      setFromDate(today);
+      setToDate(today);
+      return;
+    }
+    if (preset === "yesterday") {
+      const yesterday = addDaysToIsoDate(today, -1) ?? today;
+      setFromDate(yesterday);
+      setToDate(yesterday);
+      return;
+    }
+    if (preset === "last7") {
+      setFromDate(addDaysToIsoDate(today, -6) ?? today);
+      setToDate(today);
+      return;
+    }
+    setFromDate(startOfMonth(today));
+    setToDate(today);
+  }
+
+  function clearFilters() {
+    setFromDate("");
+    setToDate("");
+    setCategoryId("");
+    setSalesmanId("");
+    setSaleIdInput("");
+    setSaleIdQuery("");
+  }
 
   function renderInvoiceHtml(bill: BillResponse) {
     const rows = bill.items
@@ -178,87 +297,171 @@ export default function CategorySalesPage() {
       printWindow.print();
       printWindow.close();
     } catch (printError) {
-      const message = printError instanceof Error ? printError.message : "Unable to print this sale.";
-      setError(message);
+      setError(printError instanceof Error ? printError.message : "Unable to print this sale.");
     } finally {
       setPrintingSaleId(null);
     }
   }
 
+  const presetButtons = [
+    { key: "today" as const, label: "Today" },
+    { key: "yesterday" as const, label: "Yesterday" },
+    { key: "last7" as const, label: "Last 7 Days" },
+    { key: "month" as const, label: "This Month" },
+  ];
+
   return (
     <main className="min-h-screen p-4 md:p-6">
       <div className="mx-auto w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-semibold text-slate-900">Category-Wise Sales</h1>
-          <Link
-            href="/"
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
-            Back to Sale Page
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/admin/categories"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            >
+              Manage Categories
+            </Link>
+            <Link
+              href="/"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            >
+              Back to Sale Page
+            </Link>
+          </div>
         </div>
 
-        <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-4">
-          <label className="text-sm text-slate-700">
-            From Date
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(event) => setFromDate(event.target.value)}
-              className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            To Date
-            <input
-              type="date"
-              value={toDate}
-              onChange={(event) => setToDate(event.target.value)}
-              className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              setFromDate("");
-              setToDate("");
-            }}
-            className="h-10 self-end rounded border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
-            Clear Filters
-          </button>
+        <div className="mb-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="flex flex-wrap gap-2">
+            {presetButtons.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => applyPreset(preset.key)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                {preset.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Clear Filters
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
+            <label className="text-sm text-slate-700">
+              From Date
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(event) => setFromDate(event.target.value)}
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none"
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              To Date
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(event) => setToDate(event.target.value)}
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none"
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              Category
+              <select
+                value={categoryId}
+                onChange={(event) => setCategoryId(event.target.value)}
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none"
+              >
+                <option value="">All categories</option>
+                {categoryOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-slate-700">
+              Salesman
+              <select
+                value={salesmanId}
+                onChange={(event) => setSalesmanId(event.target.value)}
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none"
+              >
+                <option value="">All salesmen</option>
+                {salesmanOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-slate-700">
+              Sale ID
+              <input
+                value={saleIdInput}
+                onChange={(event) => setSaleIdInput(event.target.value)}
+                placeholder="e.g. sale-12"
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none"
+              />
+            </label>
+          </div>
+
+          <p className="text-xs text-slate-500">
+            Dates are whole days in {APP_TIME_ZONE}.
+            {datesAreReversed ? " From/To were entered backwards, so the range was swapped." : ""}
+            {categoryId
+              ? " With a category selected, the sale-wise tab shows only that category's part of each bill."
+              : ""}
+          </p>
         </div>
 
-        {loading ? <p className="text-sm text-slate-500">Loading...</p> : null}
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? (
+          <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {error}
+          </p>
+        ) : null}
 
-        {!loading && !error ? (
-          <div className="space-y-6">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab("category")}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                  activeTab === "category"
-                    ? "bg-blue-600 text-white"
-                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                Category-Wise
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("sales")}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                  activeTab === "sales"
-                    ? "bg-blue-600 text-white"
-                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                Sale-Wise
-              </button>
-            </div>
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("category")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                activeTab === "category"
+                  ? "bg-blue-600 text-white"
+                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              Category-Wise
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("sales")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                activeTab === "sales"
+                  ? "bg-blue-600 text-white"
+                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              Sale-Wise
+            </button>
+            <span className="text-xs text-slate-500">
+              {loading
+                ? "Loading..."
+                : `${summary.overall.totalBills} bill(s) · ${summary.overall.totalSales} item(s)`}
+            </span>
+          </div>
 
+          <div className={loading ? "opacity-50 transition" : "transition"}>
             {activeTab === "category" ? (
               <div className="overflow-x-auto">
                 <h2 className="mb-2 text-base font-semibold text-slate-900">Category Summary</h2>
@@ -274,22 +477,37 @@ export default function CategorySalesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.byCategory.map((item) => (
-                      <tr key={item.categoryId} className="border-b border-slate-100">
-                        <td className="py-2 pr-3 text-slate-600">{item.number}</td>
-                        <td className="py-2 pr-3 font-medium text-slate-800">{item.name}</td>
-                        <td className="py-2 pr-3 text-slate-600">{item.totalSales}</td>
-                        <td className="py-2 text-right font-semibold text-slate-800">
-                          {item.grossAmount.toFixed(2)}
-                        </td>
-                        <td className="py-2 text-right font-semibold text-slate-800">
-                          {item.totalDiscount.toFixed(2)}
-                        </td>
-                        <td className="py-2 text-right font-semibold text-slate-800">
-                          {item.totalAmount.toFixed(2)}
+                    {summary.byCategory.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-3 text-center text-slate-500">
+                          No categories match the selected filters.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      summary.byCategory.map((item) => (
+                        <tr key={item.categoryId} className="border-b border-slate-100">
+                          <td className="py-2 pr-3 text-slate-600">{item.number}</td>
+                          <td className="py-2 pr-3 font-medium text-slate-800">
+                            {item.name}
+                            {item.isActive ? null : (
+                              <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                                Inactive
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-slate-600">{item.totalSales}</td>
+                          <td className="py-2 text-right font-semibold text-slate-800">
+                            {item.grossAmount.toFixed(2)}
+                          </td>
+                          <td className="py-2 text-right font-semibold text-slate-800">
+                            {item.totalDiscount.toFixed(2)}
+                          </td>
+                          <td className="py-2 text-right font-semibold text-slate-800">
+                            {item.totalAmount.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                   <tfoot>
                     <tr className="text-slate-900">
@@ -297,9 +515,15 @@ export default function CategorySalesPage() {
                         <span className="font-semibold">Overall</span>
                       </td>
                       <td className="pt-3 font-semibold">{summary.overall.totalSales}</td>
-                      <td className="pt-3 text-right font-bold">{summary.overall.grossAmount.toFixed(2)}</td>
-                      <td className="pt-3 text-right font-bold">{summary.overall.totalDiscount.toFixed(2)}</td>
-                      <td className="pt-3 text-right font-bold">{summary.overall.totalAmount.toFixed(2)}</td>
+                      <td className="pt-3 text-right font-bold">
+                        {summary.overall.grossAmount.toFixed(2)}
+                      </td>
+                      <td className="pt-3 text-right font-bold">
+                        {summary.overall.totalDiscount.toFixed(2)}
+                      </td>
+                      <td className="pt-3 text-right font-bold">
+                        {summary.overall.totalAmount.toFixed(2)}
+                      </td>
                     </tr>
                   </tfoot>
                 </table>
@@ -363,7 +587,7 @@ export default function CategorySalesPage() {
               </div>
             )}
           </div>
-        ) : null}
+        </div>
       </div>
     </main>
   );

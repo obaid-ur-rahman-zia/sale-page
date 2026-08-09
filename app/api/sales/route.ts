@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 
+import { parseObjectId } from "@/lib/object-id";
 import { prisma } from "@/lib/prisma";
 
 type CreateSalePayload = {
   saleId?: string;
-  salesmanId?: number;
+  salesmanId?: string;
   billDiscount?: number;
-  categoryId?: number;
+  categoryId?: string;
   amount?: number;
   items?: Array<{
-    categoryId?: number;
+    categoryId?: string;
     amount?: number;
   }>;
 };
@@ -47,20 +48,19 @@ export async function POST(request: Request) {
     const body = (await request.json()) as CreateSalePayload;
     const providedSaleId = body.saleId?.trim();
     const saleId = providedSaleId && providedSaleId.length > 0 ? providedSaleId : await generateSaleId();
-    const salesmanId = Number(body.salesmanId);
+    const salesmanId = parseObjectId(body.salesmanId);
     const billDiscount = Number(body.billDiscount ?? 0);
     const items =
       body.items?.map((item) => ({
-        categoryId: Number(item.categoryId),
+        categoryId: parseObjectId(item.categoryId),
         amount: Number(item.amount),
-        discount: 0,
       })) ?? [];
 
     if (items.length === 0) {
-      const categoryId = Number(body.categoryId);
+      const categoryId = parseObjectId(body.categoryId);
       const amount = Number(body.amount);
-      if (Number.isFinite(categoryId) && Number.isFinite(amount)) {
-        items.push({ categoryId, amount, discount: 0 });
+      if (categoryId && Number.isFinite(amount)) {
+        items.push({ categoryId, amount });
       }
     }
 
@@ -68,24 +68,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "At least one sale item is required" }, { status: 400 });
     }
 
-    const hasInvalidItem = items.some(
-      (item) =>
-        !Number.isFinite(item.categoryId) || item.categoryId <= 0 || !Number.isFinite(item.amount) || item.amount <= 0,
-    );
-
-    if (hasInvalidItem) {
-      return NextResponse.json(
-        { message: "All items must have valid categoryId and amount" },
-        { status: 400 },
-      );
+    const validItems: Array<{ categoryId: string; amount: number }> = [];
+    for (const item of items) {
+      if (!item.categoryId || !Number.isFinite(item.amount) || item.amount <= 0) {
+        return NextResponse.json(
+          { message: "All items must have valid categoryId and amount" },
+          { status: 400 },
+        );
+      }
+      validItems.push({ categoryId: item.categoryId, amount: item.amount });
     }
 
-    const grossAmount = items.reduce((sum, item) => sum + item.amount, 0);
+    const grossAmount = validItems.reduce((sum, item) => sum + item.amount, 0);
     if (!Number.isFinite(billDiscount) || billDiscount < 0 || billDiscount > grossAmount) {
       return NextResponse.json({ message: "Bill discount must be between 0 and gross amount" }, { status: 400 });
     }
 
-    if (!Number.isFinite(salesmanId) || salesmanId <= 0) {
+    if (!salesmanId) {
       return NextResponse.json({ message: "Valid salesman is required" }, { status: 400 });
     }
 
@@ -98,13 +97,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Salesman not found" }, { status: 404 });
     }
 
-    const categoryIds = [...new Set(items.map((item) => item.categoryId))];
+    const categoryIds = [...new Set(validItems.map((item) => item.categoryId))];
     const categories = await prisma.category.findMany({
       where: { id: { in: categoryIds } },
-      select: { id: true },
+      select: { id: true, name: true, isActive: true },
     });
-    const existingCategoryIds = new Set(categories.map((category) => category.id));
-    const missingCategoryId = categoryIds.find((id) => !existingCategoryIds.has(id));
+    const categoriesById = new Map(categories.map((category) => [category.id, category]));
+    const missingCategoryId = categoryIds.find((id) => !categoriesById.has(id));
 
     if (missingCategoryId) {
       return NextResponse.json(
@@ -113,35 +112,36 @@ export async function POST(request: Request) {
       );
     }
 
+    const inactiveCategory = categoryIds
+      .map((id) => categoriesById.get(id)!)
+      .find((category) => !category.isActive);
+
+    if (inactiveCategory) {
+      return NextResponse.json(
+        { message: `Category "${inactiveCategory.name}" is inactive and cannot be sold` },
+        { status: 400 },
+      );
+    }
+
     const createdSales = await prisma.$transaction(async (tx) => {
-      const txWithSaleBill = tx as typeof tx & {
-        saleBill?: {
-          upsert: (args: {
-            where: { saleId: string };
-            update: { totalDiscount: number };
-            create: { saleId: string; totalDiscount: number };
-          }) => Promise<unknown>;
-        };
-      };
-      const hasSaleBillModel = Boolean(txWithSaleBill.saleBill?.upsert);
+      await tx.saleBill.upsert({
+        where: { saleId },
+        update: { totalDiscount: billDiscount },
+        create: { saleId, totalDiscount: billDiscount },
+      });
 
-      if (hasSaleBillModel) {
-        await txWithSaleBill.saleBill!.upsert({
-          where: { saleId },
-          update: { totalDiscount: billDiscount },
-          create: { saleId, totalDiscount: billDiscount },
-        });
-      }
-
-      return Promise.all(
-        items.map((item, index) =>
-          tx.sale.create({
+      // Sequential, not Promise.all: operations inside an interactive transaction
+      // share one session and must not run concurrently.
+      const created = [];
+      for (const item of validItems) {
+        created.push(
+          await tx.sale.create({
             data: {
               saleId,
               categoryId: item.categoryId,
               amount: item.amount,
-              // Fallback for stale dev client: keep bill discount on first row.
-              discount: hasSaleBillModel ? 0 : index === 0 ? billDiscount : 0,
+              // The bill-level discount lives on SaleBill; rows stay gross.
+              discount: 0,
               salesmanId,
             },
             select: {
@@ -154,8 +154,9 @@ export async function POST(request: Request) {
               createdAt: true,
             },
           }),
-        ),
-      );
+        );
+      }
+      return created;
     });
 
     return NextResponse.json(

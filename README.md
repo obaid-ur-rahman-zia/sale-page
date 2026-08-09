@@ -1,36 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sale Page
 
-## Getting Started
+Touch-friendly point-of-sale screen with category-wise and sale-wise reporting.
+Next.js 16 (App Router) + Prisma + MongoDB.
 
-First, run the development server:
+## Database: MongoDB
+
+Prisma **requires MongoDB to run as a replica set**. A standalone `mongod` rejects
+even a single `create` with `P2031: Prisma needs to perform transactions, which
+requires your MongoDB server to be run as a replica set`. MongoDB Atlas is already a
+replica set; locally the quickest option is a single-node one in docker:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+docker run -d --name salepage-mongo -p 27018:27017 mongo:7 --replSet rs0 --bind_ip_all
+docker exec salepage-mongo mongosh --quiet --eval \
+  'rs.initiate({_id:"rs0",members:[{_id:0,host:"127.0.0.1:27017"}]})'
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then in `.env` (copy `.env.example`):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+DATABASE_URL="mongodb://localhost:27018/salepage?directConnection=true"
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`directConnection=true` skips replica-set discovery, which would otherwise send the
+driver to the container-internal host name. Atlas connection strings do not need it.
 
-## Learn More
+If you would rather use a MongoDB you already have on `localhost:27017`, add
+`replication: { replSetName: rs0 }` to its `mongod.cfg`, restart the service, and run
+`rs.initiate()` once — a single-node replica set behaves like a standalone otherwise.
 
-To learn more about Next.js, take a look at the following resources:
+### Prisma version
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Pinned to **Prisma 6.19.3**, not 7.x. Prisma 7 requires a driver adapter for every
+datasource and no MongoDB adapter exists yet, so v7 can run the CLI but cannot connect
+at runtime. Keep the exact pins in `package.json` until `@prisma/adapter-mongodb` ships.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Commands
 
-## Deploy on Vercel
+```bash
+npm run db:push     # apply schema + indexes (MongoDB has no migration history)
+npm run db:seed     # default categories and salesmen
+npm run db:studio   # browse the data
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`db:seed` inserts the categories **Bags, Jewelry, Flags, Decorations, Cloth, Paint,
+Others** with hosted images. Re-running it refreshes images only, so names edited from
+the admin screen are preserved.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Getting started
+
+```bash
+npm install
+npm run db:push
+npm run db:seed
+npm run dev
+```
+
+- `/` — sale screen (keypad, categories, bill discount, printing)
+- `/category-sales` — reports
+- `/admin/categories` — add, edit, reorder, deactivate and delete categories
+
+## Reports and filters
+
+Filters apply to both report tabs: date range with Today / Yesterday / Last 7 Days /
+This Month presets, category, salesman, and a partial sale-ID search.
+
+Two things worth knowing about the numbers:
+
+- **Dates are whole days in `APP_TIME_ZONE`** (default `Asia/Karachi`), not UTC. With
+  UTC boundaries a "today" filter in a UTC+5 shop silently dropped every sale made
+  before 5am. Set `APP_TIME_ZONE` and `NEXT_PUBLIC_APP_TIME_ZONE` together.
+- **Bill discounts are allocated to categories in proportion to amount.** A discount is
+  taken on the bill as a whole and stored on `SaleBill`, so a per-category report that
+  read `Sale.discount` showed zero discount everywhere. `lib/sales-report.ts` spreads it
+  across the bill's lines once, which is what makes the category tab, the sale tab and
+  the printed invoice add up to the same net.
+
+With a category filter active, the sale-wise tab shows only that category's share of
+each bill, so the two tabs keep tying out.
+
+## Admin access
+
+`/admin/*` and the category write endpoints are open by default. Set `ADMIN_PASSWORD`
+(and optionally `ADMIN_USER`, default `admin`) to put HTTP Basic auth in front of them —
+see `proxy.ts`. Leaving it unset keeps the current behaviour.
+
+Category images are entered as URLs. `next.config.ts` allows any `https` host; the API
+rejects anything that is not `https://` or a `/path` from `public/`.
+
+## Deployment
+
+The `Dockerfile` builds a standalone image. `DATABASE_URL` must be supplied by the
+deployment environment and point at a replica set or Atlas — it is deliberately not
+baked into the image.
