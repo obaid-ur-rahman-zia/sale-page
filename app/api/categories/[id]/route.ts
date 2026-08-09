@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { validateCategoryInput } from "@/lib/category-input";
-import { parseObjectId } from "@/lib/object-id";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-async function resolveId(context: RouteContext): Promise<string | null> {
+async function resolveId(context: RouteContext): Promise<number | null> {
   const { id } = await context.params;
-  return parseObjectId(id);
+  const parsed = Number(id);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 export async function PATCH(request: Request, context: RouteContext) {

@@ -6,10 +6,10 @@ import "dotenv/config";
 function assertDatabaseUrl() {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) {
-    throw new Error("DATABASE_URL is not set. Point it at a MongoDB replica set.");
+    throw new Error("DATABASE_URL is not set. Point it at a PostgreSQL instance.");
   }
-  if (!url.startsWith("mongodb://") && !url.startsWith("mongodb+srv://")) {
-    throw new Error(`DATABASE_URL ("${url}") is not a MongoDB connection string.`);
+  if (!url.startsWith("postgres://") && !url.startsWith("postgresql://")) {
+    throw new Error(`DATABASE_URL ("${url}") is not a PostgreSQL connection string.`);
   }
 }
 

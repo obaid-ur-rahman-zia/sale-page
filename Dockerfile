@@ -42,7 +42,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 # DATABASE_URL must be supplied by the deployment (Dokploy env vars) and point at a
-# MongoDB replica set or Atlas cluster — Prisma cannot write to a standalone mongod.
+# PostgreSQL instance. It is deliberately not baked into the image, and the build
+# does not need it.
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \

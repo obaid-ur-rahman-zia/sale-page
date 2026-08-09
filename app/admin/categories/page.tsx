@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { normaliseImageUrl } from "@/lib/category-input";
 
 type AdminCategory = {
-  id: string;
+  id: number;
   number: number;
   name: string;
   imageUrl: string;
@@ -44,12 +44,12 @@ function ImagePreview({ url, alt }: { url: string; alt: string }) {
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const [draft, setDraft] = useState<DraftCategory>(emptyDraft);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<DraftCategory>(emptyDraft);
 
   const loadCategories = useCallback(async () => {
@@ -128,7 +128,7 @@ export default function AdminCategoriesPage() {
     }
   }
 
-  async function patchCategory(id: string, payload: Record<string, unknown>, successText: string) {
+  async function patchCategory(id: number, payload: Record<string, unknown>, successText: string) {
     try {
       setBusyId(id);
       setFeedback(null);
@@ -156,7 +156,7 @@ export default function AdminCategoriesPage() {
     }
   }
 
-  async function saveEdit(id: string) {
+  async function saveEdit(id: number) {
     if (editDraft.name.trim() === "" || normaliseImageUrl(editDraft.imageUrl) === null) {
       setFeedback({ type: "error", text: "Name and a valid image URL are required." });
       return;

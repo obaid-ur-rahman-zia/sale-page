@@ -1,22 +1,20 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Pinned to Prisma 6: Prisma 7 requires a driver adapter for every datasource and
-// no MongoDB adapter exists, so v7 cannot connect to MongoDB at runtime.
 generator client {
   provider = "prisma-client-js"
-  // MongoDB runs through the Prisma query engine, so the Linux target used by the
-  // Dockerfile (node:20-bookworm-slim) has to be generated as well.
+  // The Linux target used by the Dockerfile (node:20-bookworm-slim) has to be
+  // generated alongside the local one.
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "mongodb"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model Category {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        Int      @id @default(autoincrement())
   number    Int      @unique
   name      String
   imageUrl  String
@@ -29,7 +27,7 @@ model Category {
 }
 
 model Salesman {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        Int      @id @default(autoincrement())
   name      String   @unique
   sales     Sale[]
   createdAt DateTime @default(now())
@@ -37,13 +35,13 @@ model Salesman {
 }
 
 model Sale {
-  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  id         Int       @id @default(autoincrement())
   saleId     String
   amount     Float
   discount   Float     @default(0)
-  categoryId String    @db.ObjectId
+  categoryId Int
   category   Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  salesmanId String?   @db.ObjectId
+  salesmanId Int?
   salesman   Salesman? @relation(fields: [salesmanId], references: [id], onDelete: SetNull)
   createdAt  DateTime  @default(now())
 
@@ -54,7 +52,7 @@ model Sale {
 }
 
 model SaleBill {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  id            Int      @id @default(autoincrement())
   saleId        String   @unique
   totalDiscount Float    @default(0)
   createdAt     DateTime @default(now())

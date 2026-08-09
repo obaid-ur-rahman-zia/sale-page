@@ -1,19 +1,23 @@
 import { NextResponse } from "next/server";
 
-import { parseObjectId } from "@/lib/object-id";
 import { prisma } from "@/lib/prisma";
 
 type CreateSalePayload = {
   saleId?: string;
-  salesmanId?: string;
+  salesmanId?: number;
   billDiscount?: number;
-  categoryId?: string;
+  categoryId?: number;
   amount?: number;
   items?: Array<{
-    categoryId?: string;
+    categoryId?: number;
     amount?: number;
   }>;
 };
+
+function parseId(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 function parseSaleNumber(saleId: string) {
   const match = /^sale-(\d+)$/i.exec(saleId.trim());
@@ -48,16 +52,16 @@ export async function POST(request: Request) {
     const body = (await request.json()) as CreateSalePayload;
     const providedSaleId = body.saleId?.trim();
     const saleId = providedSaleId && providedSaleId.length > 0 ? providedSaleId : await generateSaleId();
-    const salesmanId = parseObjectId(body.salesmanId);
+    const salesmanId = parseId(body.salesmanId);
     const billDiscount = Number(body.billDiscount ?? 0);
     const items =
       body.items?.map((item) => ({
-        categoryId: parseObjectId(item.categoryId),
+        categoryId: parseId(item.categoryId),
         amount: Number(item.amount),
       })) ?? [];
 
     if (items.length === 0) {
-      const categoryId = parseObjectId(body.categoryId);
+      const categoryId = parseId(body.categoryId);
       const amount = Number(body.amount);
       if (categoryId && Number.isFinite(amount)) {
         items.push({ categoryId, amount });
@@ -68,7 +72,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "At least one sale item is required" }, { status: 400 });
     }
 
-    const validItems: Array<{ categoryId: string; amount: number }> = [];
+    const validItems: Array<{ categoryId: number; amount: number }> = [];
     for (const item of items) {
       if (!item.categoryId || !Number.isFinite(item.amount) || item.amount <= 0) {
         return NextResponse.json(

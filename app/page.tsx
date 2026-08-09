@@ -5,19 +5,19 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 type Category = {
-  id: string;
+  id: number;
   number: number;
   name: string;
   imageUrl: string;
 };
 
 type Salesman = {
-  id: string;
+  id: number;
   name: string;
 };
 
 type SaleItem = {
-  categoryId: string;
+  categoryId: number;
   categoryName: string;
   amount: number;
   discount: number;
@@ -25,11 +25,11 @@ type SaleItem = {
 
 type BillResponse = {
   saleId: string;
-  salesman: { id: string; name: string } | null;
+  salesman: { id: number; name: string } | null;
   createdAt: string;
   items: Array<{
-    id: string;
-    categoryId: string;
+    id: number;
+    categoryId: number;
     categoryNumber: number;
     categoryName: string;
     amount: number;
@@ -66,8 +66,8 @@ function getNextSaleId(currentSaleId: string | null) {
 
 export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedSalesmanId, setSelectedSalesmanId] = useState<string | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedSalesmanId, setSelectedSalesmanId] = useState<number | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [amountInput, setAmountInput] = useState("");
   const [discountInput, setDiscountInput] = useState("");
   const [appliedBillDiscount, setAppliedBillDiscount] = useState(0);

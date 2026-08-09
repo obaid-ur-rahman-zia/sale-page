@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { APP_TIME_ZONE, addDaysToIsoDate, isoDateInZone } from "@/lib/time-zone";
 
 type CategorySummary = {
-  categoryId: string;
+  categoryId: number;
   number: number;
   name: string;
   isActive: boolean;
@@ -54,7 +54,7 @@ type BillResponse = {
   };
 };
 
-type FilterOption = { id: string; name: string };
+type FilterOption = { id: number; name: string };
 
 const emptySummary: SalesSummaryResponse = {
   overall: { grossAmount: 0, totalDiscount: 0, totalAmount: 0, totalSales: 0, totalBills: 0 },
@@ -117,7 +117,7 @@ export default function CategorySalesPage() {
 
         if (categoriesResponse.ok) {
           const data = (await categoriesResponse.json()) as {
-            categories: Array<{ id: string; number: number; name: string }>;
+            categories: Array<{ id: number; number: number; name: string }>;
           };
           setCategoryOptions(
             (data.categories ?? []).map((category) => ({

@@ -1,12 +1,11 @@
-import { parseObjectId } from "./object-id";
 import { prisma } from "./prisma";
 import { APP_TIME_ZONE, endOfZonedDayExclusive, isIsoDate, startOfZonedDay } from "./time-zone";
 
 export type ReportFilters = {
   from: string | null;
   to: string | null;
-  categoryId: string | null;
-  salesmanId: string | null;
+  categoryId: number | null;
+  salesmanId: number | null;
   saleId: string | null;
 };
 
@@ -19,17 +18,22 @@ export type ReportRange = {
 export type SaleLine = {
   saleId: string;
   createdAt: Date;
-  categoryId: string;
+  categoryId: number;
   categoryNumber: number;
   categoryName: string;
-  salesmanId: string | null;
+  salesmanId: number | null;
   salesmanName: string;
   amount: number;
   discount: number;
 };
 
-function parseOptionalId(raw: string | null): string | null {
-  return parseObjectId(raw?.trim());
+function parseOptionalId(raw: string | null): number | null {
+  const value = raw?.trim();
+  if (!value) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function parseOptionalDate(raw: string | null): string | null {
@@ -196,7 +200,7 @@ export async function loadSaleLines(filters: ReportFilters): Promise<SaleLine[]>
 }
 
 export type CategoryTotals = {
-  categoryId: string;
+  categoryId: number;
   number: number;
   name: string;
   grossAmount: number;
@@ -205,8 +209,8 @@ export type CategoryTotals = {
   totalSales: number;
 };
 
-export function summariseByCategory(lines: SaleLine[]): Map<string, CategoryTotals> {
-  const totals = new Map<string, CategoryTotals>();
+export function summariseByCategory(lines: SaleLine[]): Map<number, CategoryTotals> {
+  const totals = new Map<number, CategoryTotals>();
 
   for (const line of lines) {
     const existing = totals.get(line.categoryId);
